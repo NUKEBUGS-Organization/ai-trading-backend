@@ -15,7 +15,16 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: [
+    'https://ai-tradingbot-frontend.vcl4xengine.com',
+    'http://localhost:5173',
+    'http://localhost:3000'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // Routes
@@ -140,7 +149,9 @@ setInterval(simulateSignalAlert, 10000);
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`\n🚀 AurumX Trading Server running on port ${PORT}`);
-  console.log(`📡 WebSocket server running on ws://localhost:${PORT}/ws`);
-  console.log(`🌐 API available at http://localhost:${PORT}/api`);
+  const wsProto = process.env.NODE_ENV === 'production' ? 'wss' : 'ws';
+  const httpProto = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+  console.log(`📡 WebSocket server running on ${wsProto}://localhost:${PORT}/ws`);
+  console.log(`🌐 API available at ${httpProto}://localhost:${PORT}/api`);
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`);
 });
