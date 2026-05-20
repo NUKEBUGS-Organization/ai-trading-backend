@@ -28,6 +28,19 @@ router.post('/status', async (req, res) => {
       status: req.body
     };
     wsHub.broadcastMt5AccountFromPayload(req.body);
+    wsHub.broadcastMt5PricesFromPayload(req.body);
+    res.json({ received: true });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   POST /api/engine/prices
+// @desc    Receive live MT5 quotes from Python engine → WebSocket tickers
+// @access  Internal
+router.post('/prices', async (req, res) => {
+  try {
+    wsHub.broadcastMt5PricesFromPayload(req.body);
     res.json({ received: true });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -52,6 +65,7 @@ router.get('/status', protect, async (req, res) => {
       if (response.ok) {
         const data = await response.json();
         wsHub.broadcastMt5AccountFromPayload(data);
+        wsHub.broadcastMt5PricesFromPayload(data);
         return res.json({ connected: true, ...data });
       }
       console.error('Python engine responded with:', response.status, `(${base})`);
@@ -79,14 +93,14 @@ router.post('/signal', async (req, res) => {
       symbol: signalData.symbol,
       direction: signalData.direction,
       confidence: signalData.confidence,
-      entryPrice: signalData.entry,
-      stopLoss: signalData.sl,
-      takeProfit: signalData.tp,
-      marketBias: signalData.h4_bias || 'neutral',
+      entryPrice: signalData.entry ?? signalData.entryPrice,
+      stopLoss: signalData.sl ?? signalData.stopLoss,
+      takeProfit: signalData.tp ?? signalData.takeProfit,
+      marketBias: signalData.h4_bias || signalData.h4Bias || 'neutral',
       session: signalData.session || 'london',
       qualityScore: signalData.confidence / 10,
       strategy: 'AMD AI Engine',
-      status: 'active'
+      status: signalData.status || 'active'
     });
     
     res.json({ received: true, signalId: signal._id });
@@ -229,6 +243,40 @@ router.get('/risk/:userId', async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user.riskSettings);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   POST /api/engine/risk/preset
+// @desc    Change risk preset (proxies to Python engine)
+// @access  Private
+router.post('/risk/preset', protect, async (req, res) => {
+  try {
+    const { preset, userId } = req.body;
+    if (!preset || !['conservative', 'moderate', 'aggressive'].includes(preset)) {
+      return res.status(400).json({ message: 'Invalid preset. Use conservative, moderate, or aggressive' });
+    }
+
+    // Update Python engine preset
+    const result = await proxyPostToPython('/api/engine/risk/preset', { preset });
+
+    // Also save to user's MongoDB profile
+    if (userId || req.user?._id) {
+      const User = require('../models/User');
+      const presetSettings = {
+        conservative: { maxRiskPerTrade: 1, maxDailyDrawdown: 3, maxOpenPositions: 3 },
+        moderate: { maxRiskPerTrade: 2, maxDailyDrawdown: 5, maxOpenPositions: 5 },
+        aggressive: { maxRiskPerTrade: 5, maxDailyDrawdown: 10, maxOpenPositions: 10 },
+      };
+      await User.findByIdAndUpdate(
+        userId || req.user._id,
+        { riskSettings: { ...presetSettings[preset], dynamicLotSizing: true, spreadProtection: true, newsFilter: true } }
+      );
+    }
+
+    if (result.ok) return res.json({ success: true, preset, ...result.data });
+    return res.status(502).json({ message: 'Failed to update Python engine preset' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
