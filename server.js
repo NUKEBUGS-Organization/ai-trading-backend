@@ -78,6 +78,7 @@ function simulatePriceTick() {
 
   const data = {
     type: 'price_update',
+    source: 'simulation',
     timestamp: new Date().toISOString(),
     prices: {
       XAUUSD: { bid: parseFloat(goldPrice.toFixed(2)), ask: parseFloat((goldPrice + 0.30).toFixed(2)), spread: 30 },
@@ -144,8 +145,12 @@ function broadcast(data) {
 const wsHub = require('./wsHub');
 wsHub.setBroadcast(broadcast);
 
-// Start intervals
-setInterval(simulatePriceTick, 1500);
+// Simulated tickers only when MT5 live quotes are not arriving
+setInterval(() => {
+  if (!wsHub.hasRecentMt5Prices(10000)) {
+    simulatePriceTick();
+  }
+}, 1500);
 // Account updates only from MT5/Python (wsHub); never broadcast demo balances over real data
 if (process.env.ENABLE_DEMO_ACCOUNT_WS === 'true') {
   setInterval(() => {

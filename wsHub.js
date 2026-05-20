@@ -1,6 +1,7 @@
 /** Shared WebSocket broadcast for HTTP routes (e.g. MT5 account from Python). */
 let broadcastFn = null;
 let lastMt5AccountAt = 0;
+let lastMt5PricesAt = 0;
 
 function setBroadcast(fn) {
   broadcastFn = fn;
@@ -18,6 +19,46 @@ function markMt5AccountReceived() {
 
 function hasRecentMt5Account(maxAgeMs = 30000) {
   return lastMt5AccountAt > 0 && Date.now() - lastMt5AccountAt < maxAgeMs;
+}
+
+function markMt5PricesReceived() {
+  lastMt5PricesAt = Date.now();
+}
+
+function hasRecentMt5Prices(maxAgeMs = 10000) {
+  return lastMt5PricesAt > 0 && Date.now() - lastMt5PricesAt < maxAgeMs;
+}
+
+function normalizePricesForWs(prices) {
+  if (!prices || typeof prices !== 'object') return null;
+  const out = {};
+  for (const [symbol, q] of Object.entries(prices)) {
+    if (!q || q.bid == null) continue;
+    const bid = Number(q.bid);
+    const ask = Number(q.ask ?? q.bid);
+    if (bid <= 0) continue;
+    out[symbol] = {
+      bid,
+      ask,
+      spread: Number(q.spread) || 0,
+    };
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+function broadcastMt5PricesFromPayload(body) {
+  const prices = normalizePricesForWs(body?.mt5_prices || body?.prices);
+  if (!prices) return false;
+  markMt5PricesReceived();
+  broadcast(
+    JSON.stringify({
+      type: 'price_update',
+      source: 'mt5',
+      timestamp: new Date().toISOString(),
+      prices,
+    })
+  );
+  return true;
 }
 
 function extractWsAccountFromEnginePayload(body) {
@@ -71,6 +112,9 @@ module.exports = {
   broadcast,
   markMt5AccountReceived,
   hasRecentMt5Account,
+  markMt5PricesReceived,
+  hasRecentMt5Prices,
   broadcastMt5AccountFromPayload,
+  broadcastMt5PricesFromPayload,
   extractWsAccountFromEnginePayload,
 };
