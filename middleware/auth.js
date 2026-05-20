@@ -20,8 +20,18 @@ const protect = async (req, res, next) => {
 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = await User.findById(decoded.id).select('-password');
-      next();
+      const mongoose = require('mongoose');
+
+      if (mongoose.connection.readyState !== 1) {
+        return res.status(503).json({ message: 'Database unavailable' });
+      }
+
+      const user = await User.findById(decoded.id).select('-password');
+      if (!user) {
+        return res.status(401).json({ message: 'Not authorized, user not found' });
+      }
+      req.user = user;
+      return next();
     } catch (error) {
       console.error('Token verification failed:', error.message);
       return res.status(401).json({ message: 'Not authorized, token failed' });

@@ -79,11 +79,14 @@ router.get('/plans', (req, res) => {
 router.get('/my', protect, async (req, res) => {
   try {
     const mongoose = require('mongoose');
-    if (mongoose.connection.readyState !== 1) {
+    const { getMongoUserId } = require('../utils/userId');
+    const mongoUserId = getMongoUserId(req);
+
+    if (mongoose.connection.readyState !== 1 || !mongoUserId) {
       return res.json({ plan: 'professional', status: 'active', licenseKey: 'AX-A1B2-C3D4-E5F6', billing: { nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) } });
     }
 
-    const subscription = await Subscription.findOne({ user: req.user._id, status: 'active' });
+    const subscription = await Subscription.findOne({ user: mongoUserId, status: 'active' });
     res.json(subscription || { plan: 'free', status: 'active' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });

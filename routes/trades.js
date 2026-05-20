@@ -1,6 +1,7 @@
 const express = require('express');
 const Trade = require('../models/Trade');
 const { protect } = require('../middleware/auth');
+const { getMongoUserId } = require('../utils/userId');
 const router = express.Router();
 
 // @route   GET /api/trades
@@ -9,12 +10,14 @@ const router = express.Router();
 router.get('/', protect, async (req, res) => {
   try {
     const mongoose = require('mongoose');
-    if (mongoose.connection.readyState !== 1) {
+    const mongoUserId = getMongoUserId(req);
+
+    if (mongoose.connection.readyState !== 1 || !mongoUserId) {
       return res.json({ trades: [], total: 0, page: 1, pages: 1 });
     }
 
     const { status, limit = 50, page = 1 } = req.query;
-    const query = { user: req.user._id };
+    const query = { user: mongoUserId };
     if (status) query.status = status;
 
     const trades = await Trade.find(query)
@@ -36,7 +39,9 @@ router.get('/', protect, async (req, res) => {
 router.get('/stats', protect, async (req, res) => {
   try {
     const mongoose = require('mongoose');
-    if (mongoose.connection.readyState !== 1) {
+    const mongoUserId = getMongoUserId(req);
+
+    if (mongoose.connection.readyState !== 1 || !mongoUserId) {
       return res.json({
         totalTrades: 125,
         openTrades: 3,
@@ -50,8 +55,8 @@ router.get('/stats', protect, async (req, res) => {
       });
     }
 
-    const trades = await Trade.find({ user: req.user._id, status: 'closed' });
-    const openTrades = await Trade.find({ user: req.user._id, status: 'open' });
+    const trades = await Trade.find({ user: mongoUserId, status: 'closed' });
+    const openTrades = await Trade.find({ user: mongoUserId, status: 'open' });
 
     const wins = trades.filter(t => t.profit > 0);
     const losses = trades.filter(t => t.profit <= 0);
@@ -83,7 +88,9 @@ router.get('/stats', protect, async (req, res) => {
 router.get('/equity-curve', protect, async (req, res) => {
   try {
     const mongoose = require('mongoose');
-    if (mongoose.connection.readyState !== 1) {
+    const mongoUserId = getMongoUserId(req);
+
+    if (mongoose.connection.readyState !== 1 || !mongoUserId) {
       return res.json([
         { date: '2025-05-01', balance: 10000, profit: 0 },
         { date: '2025-05-02', balance: 10200, profit: 200 },
@@ -95,7 +102,7 @@ router.get('/equity-curve', protect, async (req, res) => {
       ]);
     }
 
-    const trades = await Trade.find({ user: req.user._id, status: 'closed' }).sort({ closeTime: 1 });
+    const trades = await Trade.find({ user: mongoUserId, status: 'closed' }).sort({ closeTime: 1 });
     
     let balance = 10000;
     const curve = [{ date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], balance: 10000 }];

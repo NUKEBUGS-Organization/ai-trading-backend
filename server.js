@@ -94,6 +94,7 @@ function simulateAccountUpdate() {
   const equity = 52430.80 + (Math.random() - 0.45) * 500;
   const data = {
     type: 'account_update',
+    source: 'simulation',
     timestamp: new Date().toISOString(),
     account: {
       balance: 52430.80,
@@ -140,9 +141,19 @@ function broadcast(data) {
   });
 }
 
+const wsHub = require('./wsHub');
+wsHub.setBroadcast(broadcast);
+
 // Start intervals
 setInterval(simulatePriceTick, 1500);
-setInterval(simulateAccountUpdate, 5000);
+// Account updates only from MT5/Python (wsHub); never broadcast demo balances over real data
+if (process.env.ENABLE_DEMO_ACCOUNT_WS === 'true') {
+  setInterval(() => {
+    if (!wsHub.hasRecentMt5Account(30000)) {
+      simulateAccountUpdate();
+    }
+  }, 5000);
+}
 setInterval(simulateSignalAlert, 10000);
 
 // Start Server

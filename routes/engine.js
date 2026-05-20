@@ -3,6 +3,7 @@ const AITrade = require('../models/AITrade');
 const Signal = require('../models/Signal');
 const { protect, adminOnly } = require('../middleware/auth');
 const router = express.Router();
+const wsHub = require('../wsHub');
 
 const PYTHON_ENGINE_URL = process.env.PYTHON_ENGINE_URL || 'http://localhost:8000';
 const PYTHON_ENGINE_INTERNAL_URL =
@@ -26,6 +27,7 @@ router.post('/status', async (req, res) => {
       lastUpdate: new Date().toISOString(),
       status: req.body
     };
+    wsHub.broadcastMt5AccountFromPayload(req.body);
     res.json({ received: true });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -49,6 +51,7 @@ router.get('/status', protect, async (req, res) => {
       const response = await fetchEngineStatus(base);
       if (response.ok) {
         const data = await response.json();
+        wsHub.broadcastMt5AccountFromPayload(data);
         return res.json({ connected: true, ...data });
       }
       console.error('Python engine responded with:', response.status, `(${base})`);
@@ -116,13 +119,114 @@ router.get('/trades', protect, async (req, res) => {
   }
 });
 
+// @route   POST /api/engine/analyze
+// @desc    Run AI market analysis (proxies to Python engine)
+// @access  Private
+async function proxyPostToPython(path, body, timeoutMs = 60000) {
+  const bases = [...new Set([PYTHON_ENGINE_URL, PYTHON_ENGINE_INTERNAL_URL])];
+  let lastError = null;
+
+  for (let i = 0; i < bases.length; i++) {
+    const base = bases[i];
+    const isLast = i === bases.length - 1;
+    try {
+      const response = await fetch(`${base}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      const text = await response.text();
+      let data = {};
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { message: text };
+        }
+      }
+      if (response.ok) return { ok: true, data };
+      if (isLast) return { ok: false, status: response.status, data };
+    } catch (error) {
+      lastError = error;
+      if (isLast) throw error;
+    }
+  }
+  throw lastError || new Error('Python engine unreachable');
+}
+
+router.post('/analyze', protect, async (req, res) => {
+  try {
+    const { symbol } = req.body;
+    if (!symbol) {
+      return res.status(400).json({ message: 'symbol is required' });
+    }
+    const result = await proxyPostToPython('/api/engine/analyze', { symbol });
+    if (result.ok) return res.json(result.data);
+    return res.status(result.status || 502).json(result.data);
+  } catch (error) {
+    return res.status(503).json({
+      action: 'OFFLINE',
+      reason: 'Python engine not connected',
+      error: error.message,
+    });
+  }
+});
+
+// @route   POST /api/engine/backtest
+// @desc    Run backtest (proxies to Python engine)
+// @access  Private
+router.post('/backtest', protect, async (req, res) => {
+  try {
+    const { symbol, initial_balance, preset, spread_pips } = req.body;
+    if (!symbol) {
+      return res.status(400).json({ message: 'symbol is required' });
+    }
+    const result = await proxyPostToPython(
+      '/api/engine/backtest',
+      {
+        symbol,
+        initial_balance: initial_balance ?? 10000,
+        preset: preset ?? 'moderate',
+        spread_pips: spread_pips ?? 3.0,
+      },
+      120000
+    );
+    if (result.ok) return res.json(result.data);
+    return res.status(result.status || 502).json(result.data);
+  } catch (error) {
+    return res.status(503).json({
+      error: 'Python engine not connected',
+      message: error.message,
+    });
+  }
+});
+
 // @route   GET /api/engine/risk/:userId
 // @desc    Get risk settings for user (used by Python engine)
 // @access  Internal
 router.get('/risk/:userId', async (req, res) => {
   try {
+    const mongoose = require('mongoose');
+    const { userId } = req.params;
+
+    if (!/^[a-f0-9]{24}$/i.test(String(userId))) {
+      return res.status(400).json({ message: 'Invalid user id' });
+    }
+
+    if (mongoose.connection.readyState !== 1) {
+      return res.json({
+        maxDailyDrawdown: 5,
+        maxRiskPerTrade: 2,
+        maxOpenPositions: 5,
+        dynamicLotSizing: true,
+        spreadProtection: true,
+        newsFilter: true,
+      });
+    }
+
     const User = require('../models/User');
-    const user = await User.findById(req.params.userId);
+    const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user.riskSettings);
   } catch (error) {
