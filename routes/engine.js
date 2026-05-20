@@ -4,6 +4,11 @@ const Signal = require('../models/Signal');
 const { protect, adminOnly } = require('../middleware/auth');
 const router = express.Router();
 
+const PYTHON_ENGINE_URL = process.env.PYTHON_ENGINE_URL || 'http://localhost:8000';
+const PYTHON_ENGINE_INTERNAL_URL =
+  process.env.PYTHON_ENGINE_INTERNAL_URL ||
+  'http://srv-captain--ai-tradingbot-python-engine:8000';
+
 // Store engine status in memory (updated by Python engine)
 let engineStatus = {
   connected: false,
@@ -28,21 +33,34 @@ router.post('/status', async (req, res) => {
 });
 
 // @route   GET /api/engine/status
-// @desc    Get engine status for dashboard
+// @desc    Get engine status for dashboard (proxied from Python engine)
 // @access  Private
+async function fetchEngineStatus(baseUrl) {
+  return fetch(`${baseUrl}/api/engine/status`, { signal: AbortSignal.timeout(5000) });
+}
+
 router.get('/status', protect, async (req, res) => {
-  try {
-    // Check if engine is connected (last update within 60 seconds)
-    const isConnected = engineStatus.lastUpdate && 
-      (Date.now() - new Date(engineStatus.lastUpdate).getTime()) < 60000;
-    
-    res.json({
-      connected: isConnected,
-      ...engineStatus.status,
-      lastUpdate: engineStatus.lastUpdate
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+  const bases = [...new Set([PYTHON_ENGINE_URL, PYTHON_ENGINE_INTERNAL_URL])];
+
+  for (let i = 0; i < bases.length; i++) {
+    const base = bases[i];
+    const isLast = i === bases.length - 1;
+    try {
+      const response = await fetchEngineStatus(base);
+      if (response.ok) {
+        const data = await response.json();
+        return res.json({ connected: true, ...data });
+      }
+      console.error('Python engine responded with:', response.status, `(${base})`);
+      if (isLast) {
+        return res.json({ connected: false, lastUpdate: null, reason: `Engine returned ${response.status}` });
+      }
+    } catch (error) {
+      console.error('Python engine fetch error:', error.message, `(${base})`);
+      if (isLast) {
+        return res.json({ connected: false, lastUpdate: null, error: error.message });
+      }
+    }
   }
 });
 
