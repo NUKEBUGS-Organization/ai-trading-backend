@@ -313,4 +313,20 @@ router.get('/signals/active', protect, async (req, res) => {
   res.status(502).json({ message: 'Engine not available' });
 });
 
+router.get('/auto-trade/status', protect, async (req, res) => {
+  const result = await proxyGetToPython('/api/engine/auto-trade/status');
+  if (result.ok) return res.json(result.data);
+  res.status(502).json({ message: 'Engine not available' });
+});
+
+router.post('/auto-trade/toggle', protect, async (req, res) => {
+  const { enabled } = req.body;
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ message: 'enabled (boolean) is required' });
+  }
+  const result = await proxyPostToPython('/api/engine/auto-trade/toggle', { enabled });
+  if (result.ok) return res.json(result.data);
+  return res.status(result.status || 502).json(result.data || { message: 'Engine not available' });
+});
+
 module.exports = router;
