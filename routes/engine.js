@@ -136,6 +136,19 @@ router.get('/trades', protect, async (req, res) => {
 // @route   POST /api/engine/analyze
 // @desc    Run AI market analysis (proxies to Python engine)
 // @access  Private
+async function proxyGetToPython(path) {
+  const bases = [...new Set([PYTHON_ENGINE_URL, PYTHON_ENGINE_INTERNAL_URL])];
+  for (const base of bases) {
+    try {
+      const response = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(5000) });
+      if (response.ok) return { ok: true, data: await response.json() };
+    } catch (e) {
+      continue;
+    }
+  }
+  return { ok: false };
+}
+
 async function proxyPostToPython(path, body, timeoutMs = 60000) {
   const bases = [...new Set([PYTHON_ENGINE_URL, PYTHON_ENGINE_INTERNAL_URL])];
   let lastError = null;
@@ -280,6 +293,24 @@ router.post('/risk/preset', protect, async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
+});
+
+router.get('/analysis/latest', protect, async (req, res) => {
+  const result = await proxyGetToPython('/api/engine/analysis/latest');
+  if (result.ok) return res.json(result.data);
+  res.status(502).json({ message: 'Engine not available' });
+});
+
+router.get('/analysis/history', protect, async (req, res) => {
+  const result = await proxyGetToPython('/api/engine/analysis/history');
+  if (result.ok) return res.json(result.data);
+  res.status(502).json({ message: 'Engine not available' });
+});
+
+router.get('/signals/active', protect, async (req, res) => {
+  const result = await proxyGetToPython('/api/engine/signals/active');
+  if (result.ok) return res.json(result.data);
+  res.status(502).json({ message: 'Engine not available' });
 });
 
 module.exports = router;
