@@ -138,15 +138,29 @@ router.get('/trades', protect, async (req, res) => {
 // @access  Private
 async function proxyGetToPython(path) {
   const bases = [...new Set([PYTHON_ENGINE_URL, PYTHON_ENGINE_INTERNAL_URL])];
+  let lastStatus = 502;
+  let lastData = { message: 'Python engine unreachable' };
   for (const base of bases) {
     try {
       const response = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(5000) });
-      if (response.ok) return { ok: true, data: await response.json() };
+      const text = await response.text();
+      let data = {};
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch {
+          data = { message: text };
+        }
+      }
+      if (response.ok) return { ok: true, data };
+      lastStatus = response.status;
+      lastData = data;
     } catch (e) {
+      lastData = { message: e.message };
       continue;
     }
   }
-  return { ok: false };
+  return { ok: false, status: lastStatus, data: lastData };
 }
 
 async function proxyPostToPython(path, body, timeoutMs = 60000) {
@@ -181,6 +195,27 @@ async function proxyPostToPython(path, body, timeoutMs = 60000) {
   }
   throw lastError || new Error('Python engine unreachable');
 }
+
+// @route   GET /api/engine/candles/:symbol
+// @desc    OHLC series for dashboard chart (proxied from Python engine)
+// @access  Private
+router.get('/candles/:symbol', protect, async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    const { timeframe = 'M15', limit = '150' } = req.query;
+    const qs = new URLSearchParams({ timeframe, limit }).toString();
+    const result = await proxyGetToPython(`/api/engine/candles/${encodeURIComponent(symbol)}?${qs}`);
+    if (result.ok) return res.json(result.data);
+    return res.status(result.status || 404).json(
+      result.data || { message: `No candle data for ${symbol}` }
+    );
+  } catch (error) {
+    return res.status(503).json({
+      message: 'Python engine not connected',
+      error: error.message,
+    });
+  }
+});
 
 router.post('/analyze', protect, async (req, res) => {
   try {
