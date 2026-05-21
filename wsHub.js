@@ -29,20 +29,61 @@ function hasRecentMt5Prices(maxAgeMs = 10000) {
   return lastMt5PricesAt > 0 && Date.now() - lastMt5PricesAt < maxAgeMs;
 }
 
+function symbolMatchesConfig(configSym, brokerKey) {
+  const sym = String(configSym).toUpperCase();
+  const ku = String(brokerKey).toUpperCase().replace(/\.$/, '');
+  if (ku === sym || ku.startsWith(sym) || sym.startsWith(ku.replace(/M$/, ''))) return true;
+  if (sym === 'XAUUSD' && (ku.includes('XAU') || ku === 'GOLD')) return true;
+  if (sym === 'GBPUSD' && ku.includes('GBP') && ku.includes('USD')) return true;
+  if (sym === 'EURUSD' && ku.includes('EUR') && ku.includes('USD')) return true;
+  return false;
+}
+
+function isPlausibleLiveQuote(configSym, bid) {
+  if (bid == null || bid <= 0) return false;
+  if (configSym === 'EURUSD' || configSym === 'GBPUSD') return bid > 0.5 && bid < 3.5;
+  if (configSym === 'XAUUSD') return bid > 500 && bid < 20000;
+  return true;
+}
+
 function normalizePricesForWs(prices) {
   if (!prices || typeof prices !== 'object') return null;
   const out = {};
   for (const [symbol, q] of Object.entries(prices)) {
     if (!q || q.bid == null) continue;
+    if (q.live === false) continue;
     const bid = Number(q.bid);
     const ask = Number(q.ask ?? q.bid);
     if (bid <= 0) continue;
-    out[symbol] = {
+    const key = String(symbol).toUpperCase();
+    out[key] = {
       bid,
       ask,
       spread: Number(q.spread) || 0,
+      live: q.live !== false,
     };
   }
+
+  const configSymbols = ['XAUUSD', 'EURUSD', 'GBPUSD'];
+  for (const configSym of configSymbols) {
+    if (out[configSym] && isPlausibleLiveQuote(configSym, out[configSym].bid)) continue;
+    for (const [brokerKey, q] of Object.entries(prices)) {
+      if (!symbolMatchesConfig(configSym, brokerKey)) continue;
+      if (q.live === false) continue;
+      const bid = Number(q.bid);
+      const ask = Number(q.ask ?? q.bid);
+      if (!isPlausibleLiveQuote(configSym, bid)) continue;
+      out[configSym] = { bid, ask, spread: Number(q.spread) || 0, live: true };
+      break;
+    }
+  }
+
+  for (const configSym of configSymbols) {
+    if (out[configSym] && !isPlausibleLiveQuote(configSym, out[configSym].bid)) {
+      delete out[configSym];
+    }
+  }
+
   return Object.keys(out).length ? out : null;
 }
 

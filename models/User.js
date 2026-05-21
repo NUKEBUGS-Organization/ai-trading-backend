@@ -30,6 +30,10 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  acceptedTermsAt: {
+    type: Date,
+    default: null,
+  },
   subscription: {
     plan: { type: String, enum: ['free', 'starter', 'professional', 'enterprise'], default: 'free' },
     status: { type: String, enum: ['active', 'inactive', 'expired'], default: 'active' },

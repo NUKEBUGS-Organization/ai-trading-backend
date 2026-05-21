@@ -319,6 +319,16 @@ router.get('/auto-trade/status', protect, async (req, res) => {
   res.status(502).json({ message: 'Engine not available' });
 });
 
+router.post('/test-fire-trade', protect, async (req, res) => {
+  const { symbol, direction } = req.body;
+  const result = await proxyPostToPython('/api/engine/test-fire-trade', {
+    symbol: symbol || 'XAUUSD',
+    direction: direction || 'BUY',
+  });
+  if (result.ok) return res.json(result.data);
+  return res.status(result.status || 502).json(result.data || { message: 'Engine not available' });
+});
+
 router.post('/auto-trade/toggle', protect, async (req, res) => {
   const { enabled } = req.body;
   if (typeof enabled !== 'boolean') {
