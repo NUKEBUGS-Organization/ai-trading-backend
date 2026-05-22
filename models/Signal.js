@@ -66,6 +66,11 @@ const signalSchema = new mongoose.Schema({
     enum: ['active', 'executed', 'expired', 'cancelled'],
     default: 'active'
   },
+  priceSource: {
+    type: String,
+    enum: ['mt5_live', 'mt5_candle', 'stored', 'simulated'],
+    default: 'stored',
+  },
   expiresAt: {
     type: Date,
     default: () => new Date(Date.now() + 4 * 60 * 60 * 1000)

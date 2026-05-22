@@ -2,6 +2,7 @@
 let broadcastFn = null;
 let lastMt5AccountAt = 0;
 let lastMt5PricesAt = 0;
+let cachedMt5Prices = null;
 
 function setBroadcast(fn) {
   broadcastFn = fn;
@@ -90,6 +91,7 @@ function normalizePricesForWs(prices) {
 function broadcastMt5PricesFromPayload(body) {
   const prices = normalizePricesForWs(body?.mt5_prices || body?.prices);
   if (!prices) return false;
+  cachedMt5Prices = prices;
   markMt5PricesReceived();
   broadcast(
     JSON.stringify({
@@ -148,6 +150,10 @@ function broadcastMt5AccountFromPayload(body) {
   return true;
 }
 
+function getCachedMt5Prices() {
+  return cachedMt5Prices;
+}
+
 module.exports = {
   setBroadcast,
   broadcast,
@@ -155,7 +161,11 @@ module.exports = {
   hasRecentMt5Account,
   markMt5PricesReceived,
   hasRecentMt5Prices,
+  getCachedMt5Prices,
   broadcastMt5AccountFromPayload,
   broadcastMt5PricesFromPayload,
   extractWsAccountFromEnginePayload,
+  normalizePricesForWs,
+  isPlausibleLiveQuote,
+  symbolMatchesConfig,
 };

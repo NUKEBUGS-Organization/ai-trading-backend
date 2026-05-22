@@ -1,6 +1,7 @@
 const express = require('express');
 const Signal = require('../models/Signal');
 const { protect } = require('../middleware/auth');
+const { alignSignalsList } = require('../utils/alignSignalPrices');
 const router = express.Router();
 
 // @route   GET /api/signals
@@ -16,7 +17,7 @@ router.get('/', protect, async (req, res) => {
       ]);
     }
     const signals = await Signal.find({ status: 'active' }).sort({ createdAt: -1 }).limit(20);
-    res.json(signals);
+    res.json(alignSignalsList(signals));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -28,7 +29,7 @@ router.get('/', protect, async (req, res) => {
 router.get('/history', protect, async (req, res) => {
   try {
     const signals = await Signal.find().sort({ createdAt: -1 }).limit(50);
-    res.json(signals);
+    res.json(alignSignalsList(signals));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

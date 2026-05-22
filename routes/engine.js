@@ -99,8 +99,9 @@ router.post('/signal', async (req, res) => {
       marketBias: signalData.h4_bias || signalData.h4Bias || 'neutral',
       session: signalData.session || 'london',
       qualityScore: signalData.confidence / 10,
-      strategy: 'AMD AI Engine',
-      status: signalData.status || 'active'
+      strategy: signalData.strategy || 'AMD AI Engine',
+      status: signalData.status || 'active',
+      ...(signalData.priceSource ? { priceSource: signalData.priceSource } : {}),
     });
     
     res.json({ received: true, signalId: signal._id });
@@ -346,6 +347,12 @@ router.get('/signals/active', protect, async (req, res) => {
   const result = await proxyGetToPython('/api/engine/signals/active');
   if (result.ok) return res.json(result.data);
   res.status(502).json({ message: 'Engine not available' });
+});
+
+router.get('/signals/active', protect, async (req, res) => {
+  const result = await proxyGetToPython('/api/engine/signals/active');
+  if (result.ok) return res.json(result.data);
+  return res.status(result.status || 502).json(result.data || { message: 'Engine not available' });
 });
 
 router.get('/auto-trade/status', protect, async (req, res) => {
