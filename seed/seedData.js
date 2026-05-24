@@ -55,7 +55,7 @@ const seedData = async () => {
       subscription: { plan: 'enterprise', status: 'active', expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) },
       mt5Account: {
         accountId: 'MT5-900001',
-        server: 'AurumX-Live',
+        server: 'VCL4X-Live',
         connected: true,
         balance: 125750.50,
         equity: 128340.25,
@@ -84,7 +84,7 @@ const seedData = async () => {
       subscription: { plan: 'professional', status: 'active', expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
       mt5Account: {
         accountId: 'MT5-500042',
-        server: 'AurumX-Live',
+        server: 'VCL4X-Live',
         connected: true,
         balance: 52430.80,
         equity: 53210.45,
@@ -118,7 +118,7 @@ const seedData = async () => {
         subscription: { plan: plans[i], status: i === 6 ? 'expired' : 'active', expiresAt: new Date(Date.now() + (i === 6 ? -1 : 30) * 24 * 60 * 60 * 1000) },
         mt5Account: {
           accountId: `MT5-${600000 + i}`,
-          server: 'AurumX-Live',
+          server: 'VCL4X-Live',
           connected: i !== 6,
           balance: randomBetween(5000, 100000),
           equity: randomBetween(5000, 100000),

@@ -86,7 +86,7 @@ router.post('/register', async (req, res) => {
       acceptedTermsAt: new Date(),
       mt5Account: {
         accountId: `MT5-${Math.floor(100000 + Math.random() * 900000)}`,
-        server: 'AurumX-Live',
+        server: 'VCL4X-Live',
         connected: false,
         balance: 10000,
         equity: 10000,

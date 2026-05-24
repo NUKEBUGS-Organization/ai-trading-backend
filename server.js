@@ -18,8 +18,11 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 app.use(cors({
   origin: [
     'https://ai-tradingbot-frontend.vcl4xengine.com',
+    'https://vcl4xengine.com',
+    'https://www.vcl4xengine.com',
     'http://localhost:5173',
-    'http://localhost:3000'
+    'http://localhost:3000',
+    'http://localhost:3001'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -34,6 +37,7 @@ app.use('/api/signals', require('./routes/signals'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/subscriptions', require('./routes/subscriptions'));
 app.use('/api/engine', require('./routes/engine'));
+app.use('/api/public', require('./routes/public'));
 app.use('/api/licenses', require('./routes/licenses'));
 
 // Health check
@@ -164,7 +168,7 @@ setInterval(simulateSignalAlert, 10000);
 // Start Server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`\n🚀 AurumX Trading Server running on port ${PORT}`);
+  console.log(`\n🚀 VCL4X Trading Server running on port ${PORT}`);
   const wsProto = process.env.NODE_ENV === 'production' ? 'wss' : 'ws';
   const httpProto = process.env.NODE_ENV === 'production' ? 'https' : 'http';
   console.log(`📡 WebSocket server running on ${wsProto}://localhost:${PORT}/ws`);
