@@ -236,6 +236,24 @@ router.post('/analyze', protect, async (req, res) => {
   }
 });
 
+// @route   POST /api/engine/admin/broadcast-signal
+// @desc    Admin-only: run analysis and broadcast to Telegram if confidence threshold met
+// @access  Private + Admin only
+router.post('/admin/broadcast-signal', protect, adminOnly, async (req, res) => {
+  try {
+    const { symbol, min_confidence, is_test } = req.body;
+    const result = await proxyPostToPython('/api/engine/admin/broadcast-signal', {
+      symbol: symbol || 'XAUUSD',
+      min_confidence: min_confidence || 75.0,
+      is_test: is_test || false
+    });
+    if (result.ok) return res.json(result.data);
+    return res.status(502).json({ message: 'Engine not available' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // @route   POST /api/engine/backtest
 // @desc    Run backtest (proxies to Python engine)
 // @access  Private
