@@ -77,7 +77,7 @@ const seedData = async () => {
     // Create Demo User
     const demoUser = await User.create({
       name: 'Demo Trader',
-      email: 'demo@aurumx.com',
+      email: 'demo@gmail.com',
       password: 'demo123',
       role: 'user',
       isActive: true,
@@ -276,7 +276,7 @@ const seedData = async () => {
     console.log('\n✅ Seed data created successfully!');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('📧 Admin Login:  admin@aurumx.com / admin123');
-    console.log('📧 Demo Login:   demo@aurumx.com / demo123');
+    console.log('📧 Demo Login:   demo@gmail.com / demo123');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     process.exit(0);
