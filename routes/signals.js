@@ -1,13 +1,14 @@
 const express = require('express');
 const Signal = require('../models/Signal');
 const { protect } = require('../middleware/auth');
+const { requireSubscription } = require('../middleware/subscription');
 const { alignSignalsList } = require('../utils/alignSignalPrices');
 const router = express.Router();
 
 // @route   GET /api/signals
 // @desc    Get all active signals
 // @access  Private
-router.get('/', protect, async (req, res) => {
+router.get('/', protect, requireSubscription, async (req, res) => {
   try {
     const mongoose = require('mongoose');
     if (mongoose.connection.readyState !== 1) {
@@ -26,7 +27,7 @@ router.get('/', protect, async (req, res) => {
 // @route   GET /api/signals/history
 // @desc    Get signal history
 // @access  Private
-router.get('/history', protect, async (req, res) => {
+router.get('/history', protect, requireSubscription, async (req, res) => {
   try {
     const signals = await Signal.find().sort({ createdAt: -1 }).limit(50);
     res.json(alignSignalsList(signals));
@@ -38,7 +39,7 @@ router.get('/history', protect, async (req, res) => {
 // @route   GET /api/signals/market-analysis
 // @desc    Get current market analysis
 // @access  Private
-router.get('/market-analysis', protect, async (req, res) => {
+router.get('/market-analysis', protect, requireSubscription, async (req, res) => {
   try {
     const mongoose = require('mongoose');
     if (mongoose.connection.readyState !== 1) {

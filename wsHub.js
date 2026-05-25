@@ -154,6 +154,35 @@ function getCachedMt5Prices() {
   return cachedMt5Prices;
 }
 
+function broadcastSignalAlert(signal) {
+  if (!signal || typeof signal !== 'object') return false;
+  broadcast(
+    JSON.stringify({
+      type: 'signal_alert',
+      source: 'engine',
+      timestamp: new Date().toISOString(),
+      signal: {
+        id: String(signal._id || signal.id || signal.engineSignalId || ''),
+        symbol: signal.symbol,
+        direction: signal.direction,
+        confidence: signal.confidence,
+        entryPrice: signal.entryPrice ?? signal.entry,
+        stopLoss: signal.stopLoss ?? signal.sl,
+        takeProfit: signal.takeProfit ?? signal.tp,
+        grade: signal.grade,
+        amdPhase: signal.amdPhase || signal.amd_phase,
+        session: signal.session,
+        strategy: signal.strategy,
+        status: signal.status,
+        reason: signal.reason,
+        qualityScore: signal.qualityScore,
+        timestamp: signal.createdAt || signal.timestamp || new Date().toISOString(),
+      },
+    })
+  );
+  return true;
+}
+
 module.exports = {
   setBroadcast,
   broadcast,
@@ -164,6 +193,7 @@ module.exports = {
   getCachedMt5Prices,
   broadcastMt5AccountFromPayload,
   broadcastMt5PricesFromPayload,
+  broadcastSignalAlert,
   extractWsAccountFromEnginePayload,
   normalizePricesForWs,
   isPlausibleLiveQuote,

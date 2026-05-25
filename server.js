@@ -163,7 +163,10 @@ if (process.env.ENABLE_DEMO_ACCOUNT_WS === 'true') {
     }
   }, 5000);
 }
-setInterval(simulateSignalAlert, 10000);
+// Real signals broadcast via POST /api/engine/signal — disable fake alerts in production
+if (process.env.ENABLE_DEMO_SIGNAL_WS === 'true') {
+  setInterval(simulateSignalAlert, 10000);
+}
 
 // Start Server
 const PORT = process.env.PORT || 5000;

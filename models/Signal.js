@@ -50,9 +50,30 @@ const signalSchema = new mongoose.Schema({
     max: 10,
     default: 5
   },
+  grade: {
+    type: String,
+    default: ''
+  },
+  amdPhase: {
+    type: String,
+    default: ''
+  },
+  reason: {
+    type: String,
+    default: ''
+  },
+  engineSignalId: {
+    type: String,
+    default: '',
+    index: true
+  },
+  riskLevel: {
+    type: String,
+    default: ''
+  },
   strategy: {
     type: String,
-    default: 'AI Momentum'
+    default: 'AMD AI Engine'
   },
   indicators: {
     rsi: { type: Number, default: 50 },
@@ -63,8 +84,20 @@ const signalSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['active', 'executed', 'expired', 'cancelled'],
+    enum: ['active', 'executed', 'closed', 'hit_tp', 'hit_sl', 'expired', 'cancelled'],
     default: 'active'
+  },
+  closeReason: {
+    type: String,
+    default: ''
+  },
+  resultProfit: {
+    type: Number,
+    default: null
+  },
+  mt5Ticket: {
+    type: Number,
+    default: null
   },
   priceSource: {
     type: String,
@@ -74,6 +107,10 @@ const signalSchema = new mongoose.Schema({
   expiresAt: {
     type: Date,
     default: () => new Date(Date.now() + 4 * 60 * 60 * 1000)
+  },
+  closedAt: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true

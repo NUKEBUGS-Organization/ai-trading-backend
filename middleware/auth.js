@@ -10,11 +10,23 @@ const protect = async (req, res, next) => {
     
     // Mock Mode Support
     if (token === 'mock-admin-token') {
-      req.user = { _id: 'admin123', name: 'Admin', email: 'admin@aurumx.com', role: 'admin' };
+      req.user = {
+        _id: 'admin123',
+        name: 'Admin',
+        email: 'admin@aurumx.com',
+        role: 'admin',
+        subscription: { plan: 'enterprise', status: 'active', expiresAt: new Date(Date.now() + 365 * 86400000) },
+      };
       return next();
     }
     if (token === 'mock-user-token') {
-      req.user = { _id: 'user123', name: 'Demo User', email: 'demo@aurumx.com', role: 'user' };
+      req.user = {
+        _id: 'user123',
+        name: 'Demo User',
+        email: 'demo@aurumx.com',
+        role: 'user',
+        subscription: { plan: 'free', status: 'active', expiresAt: new Date(Date.now() + 30 * 86400000) },
+      };
       return next();
     }
 

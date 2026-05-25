@@ -41,7 +41,7 @@ function sanitizePublicSignal(raw) {
     (confidence >= 90 ? 'A+' : confidence >= 85 ? 'A' : confidence >= 75 ? 'B' : 'C');
 
   return {
-    id: raw.id || String(raw._id || ''),
+    id: raw.id || String(raw._id || raw.engineSignalId || ''),
     symbol,
     direction,
     entry: formatPrice(symbol, raw.entry ?? raw.entryPrice),
@@ -53,8 +53,13 @@ function sanitizePublicSignal(raw) {
     strategy: raw.strategy || 'AMD AI Engine',
     amdPhase: raw.amd_phase || raw.amdPhase || null,
     h4Bias: raw.h4_bias || raw.h4Bias || raw.marketBias || null,
+    status: raw.status || 'active',
+    closeReason: raw.closeReason || raw.close_reason || null,
+    resultProfit: raw.resultProfit ?? raw.profit ?? null,
+    reason: raw.reason || null,
     priceSource: raw.priceSource || 'stored',
     timestamp: raw.timestamp || raw.createdAt || new Date().toISOString(),
+    closedAt: raw.closedAt || null,
   };
 }
 
@@ -66,9 +71,14 @@ function isShowcaseSignal(signal) {
   return Number.isFinite(signal.entry);
 }
 
+async function loadSignalsFromDb(filter = {}) {
+  const mongoose = require('mongoose');
+  if (mongoose.connection.readyState !== 1) return [];
+  const docs = await Signal.find(filter).sort({ createdAt: -1 }).limit(24);
+  return alignSignalsList(docs).map(sanitizePublicSignal);
+}
+
 // @route   GET /api/public/signals
-// @desc    Public showcase of active AI signals (no auth)
-// @access  Public
 router.get('/signals', async (req, res) => {
   try {
     res.set('Cache-Control', 'public, max-age=15');
@@ -85,17 +95,9 @@ router.get('/signals', async (req, res) => {
 
     if (!signals.length) {
       source = 'database';
-      const mongoose = require('mongoose');
-      if (mongoose.connection.readyState === 1) {
-        const docs = await Signal.find({ status: 'active', direction: { $ne: 'NEUTRAL' } })
-          .sort({ createdAt: -1 })
-          .limit(12);
-        const aligned = alignSignalsList(docs);
-        signals = aligned
-          .map(sanitizePublicSignal)
-          .filter(isShowcaseSignal)
-          .filter((s) => !DEMO_STRATEGIES.has(s.strategy));
-      }
+      signals = (await loadSignalsFromDb({ status: 'active', direction: { $ne: 'NEUTRAL' } }))
+        .filter(isShowcaseSignal)
+        .filter((s) => !DEMO_STRATEGIES.has(s.strategy));
     }
 
     signals = signals.slice(0, 6);
@@ -114,6 +116,35 @@ router.get('/signals', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: 'Unable to load signals', error: error.message });
+  }
+});
+
+// @route   GET /api/public/signals/history
+router.get('/signals/history', async (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=30');
+    const limit = Math.min(parseInt(req.query.limit, 10) || 12, 24);
+
+    let history = await loadSignalsFromDb({
+      status: { $in: ['closed', 'hit_tp', 'hit_sl', 'executed', 'expired', 'cancelled'] },
+    });
+
+    if (!history.length) {
+      history = (await loadSignalsFromDb({ status: { $ne: 'active' } })).slice(0, limit);
+    }
+
+    history = history.slice(0, limit);
+
+    const wins = history.filter((s) => (s.resultProfit ?? 0) > 0).length;
+    const winRate = history.length ? Math.round((wins / history.length) * 100) : null;
+
+    res.json({
+      history,
+      stats: { total: history.length, winRate, wins },
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to load signal history', error: error.message });
   }
 });
 

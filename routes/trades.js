@@ -1,13 +1,14 @@
 const express = require('express');
 const Trade = require('../models/Trade');
 const { protect } = require('../middleware/auth');
+const { requireSubscription } = require('../middleware/subscription');
 const { getMongoUserId } = require('../utils/userId');
 const router = express.Router();
 
 // @route   GET /api/trades
 // @desc    Get all trades for current user
 // @access  Private
-router.get('/', protect, async (req, res) => {
+router.get('/', protect, requireSubscription, async (req, res) => {
   try {
     const mongoose = require('mongoose');
     const mongoUserId = getMongoUserId(req);
@@ -36,7 +37,7 @@ router.get('/', protect, async (req, res) => {
 // @route   GET /api/trades/stats
 // @desc    Get trading statistics
 // @access  Private
-router.get('/stats', protect, async (req, res) => {
+router.get('/stats', protect, requireSubscription, async (req, res) => {
   try {
     const mongoose = require('mongoose');
     const mongoUserId = getMongoUserId(req);
@@ -85,7 +86,7 @@ router.get('/stats', protect, async (req, res) => {
 // @route   GET /api/trades/equity-curve
 // @desc    Get equity curve data
 // @access  Private
-router.get('/equity-curve', protect, async (req, res) => {
+router.get('/equity-curve', protect, requireSubscription, async (req, res) => {
   try {
     const mongoose = require('mongoose');
     const mongoUserId = getMongoUserId(req);

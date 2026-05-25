@@ -2,6 +2,7 @@ const express = require('express');
 const AITrade = require('../models/AITrade');
 const Signal = require('../models/Signal');
 const { protect, adminOnly } = require('../middleware/auth');
+const { requireSubscription } = require('../middleware/subscription');
 const router = express.Router();
 const wsHub = require('../wsHub');
 
@@ -87,24 +88,91 @@ router.get('/status', protect, async (req, res) => {
 router.post('/signal', async (req, res) => {
   try {
     const signalData = req.body;
-    
-    // Save to Signal collection
+    const grade = signalData.grade || '';
+    const confidence = Number(signalData.confidence) || 0;
+
     const signal = await Signal.create({
       symbol: signalData.symbol,
       direction: signalData.direction,
-      confidence: signalData.confidence,
+      confidence,
       entryPrice: signalData.entry ?? signalData.entryPrice,
-      stopLoss: signalData.sl ?? signalData.stopLoss,
-      takeProfit: signalData.tp ?? signalData.takeProfit,
-      marketBias: signalData.h4_bias || signalData.h4Bias || 'neutral',
+      stopLoss: signalData.sl ?? signalData.stopLoss ?? null,
+      takeProfit: signalData.tp ?? signalData.takeProfit ?? null,
+      marketBias: signalData.h4_bias || signalData.h4Bias || signalData.marketBias || 'neutral',
       session: signalData.session || 'london',
-      qualityScore: signalData.confidence / 10,
+      qualityScore: signalData.qualityScore ?? (confidence / 10),
       strategy: signalData.strategy || 'AMD AI Engine',
+      grade,
+      amdPhase: signalData.amdPhase || signalData.amd_phase || '',
+      reason: signalData.reason || '',
+      engineSignalId: signalData.signalId || signalData.engineSignalId || '',
+      riskLevel: signalData.riskLevel || signalData.risk_level || '',
       status: signalData.status || 'active',
       ...(signalData.priceSource ? { priceSource: signalData.priceSource } : {}),
     });
-    
-    res.json({ received: true, signalId: signal._id });
+
+    wsHub.broadcastSignalAlert(signal.toObject());
+
+    res.json({ received: true, signalId: signal._id, engineSignalId: signal.engineSignalId });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   POST /api/engine/signal/result
+// @desc    Update signal when trade closes (TP/SL/manual)
+// @access  Internal
+router.post('/signal/result', async (req, res) => {
+  try {
+    const {
+      signalId,
+      engineSignalId,
+      ticket,
+      symbol,
+      status,
+      closeReason,
+      close_reason,
+      profit,
+      resultProfit,
+    } = req.body;
+
+    const query = {};
+    if (signalId) query._id = signalId;
+    else if (engineSignalId) query.engineSignalId = String(engineSignalId);
+    else if (ticket) query.mt5Ticket = Number(ticket);
+    else if (symbol) {
+      const doc = await Signal.findOne({ symbol, status: 'active' }).sort({ createdAt: -1 });
+      if (!doc) return res.status(404).json({ message: 'Active signal not found' });
+      Object.assign(query, { _id: doc._id });
+    } else {
+      return res.status(400).json({ message: 'signalId, engineSignalId, ticket, or symbol required' });
+    }
+
+    const reasonText = String(closeReason || close_reason || '').toLowerCase();
+    let resolvedStatus = status;
+    if (!resolvedStatus) {
+      if (reasonText.includes('tp') || reasonText.includes('take profit')) resolvedStatus = 'hit_tp';
+      else if (reasonText.includes('sl') || reasonText.includes('stop loss')) resolvedStatus = 'hit_sl';
+      else resolvedStatus = 'closed';
+    }
+
+    const signal = await Signal.findOneAndUpdate(
+      query,
+      {
+        status: resolvedStatus,
+        closeReason: closeReason || close_reason || '',
+        resultProfit: resultProfit ?? profit ?? null,
+        mt5Ticket: ticket ? Number(ticket) : undefined,
+        closedAt: new Date(),
+      },
+      { new: true }
+    );
+
+    if (!signal) return res.status(404).json({ message: 'Signal not found' });
+
+    wsHub.broadcastSignalAlert({ ...signal.toObject(), status: signal.status });
+
+    res.json({ updated: true, signalId: signal._id, status: signal.status });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -125,7 +193,7 @@ router.post('/trade', async (req, res) => {
 // @route   GET /api/engine/trades
 // @desc    Get AI engine trades
 // @access  Private
-router.get('/trades', protect, async (req, res) => {
+router.get('/trades', protect, requireSubscription, async (req, res) => {
   try {
     const trades = await AITrade.find().sort({ createdAt: -1 }).limit(50);
     res.json(trades);
@@ -200,7 +268,7 @@ async function proxyPostToPython(path, body, timeoutMs = 60000) {
 // @route   GET /api/engine/candles/:symbol
 // @desc    OHLC series for dashboard chart (proxied from Python engine)
 // @access  Private
-router.get('/candles/:symbol', protect, async (req, res) => {
+router.get('/candles/:symbol', protect, requireSubscription, async (req, res) => {
   try {
     const { symbol } = req.params;
     const { timeframe = 'M15', limit = '150' } = req.query;
@@ -218,7 +286,7 @@ router.get('/candles/:symbol', protect, async (req, res) => {
   }
 });
 
-router.post('/analyze', protect, async (req, res) => {
+router.post('/analyze', protect, requireSubscription, async (req, res) => {
   try {
     const { symbol } = req.body;
     if (!symbol) {
@@ -257,7 +325,7 @@ router.post('/admin/broadcast-signal', protect, adminOnly, async (req, res) => {
 // @route   POST /api/engine/backtest
 // @desc    Run backtest (proxies to Python engine)
 // @access  Private
-router.post('/backtest', protect, async (req, res) => {
+router.post('/backtest', protect, requireSubscription, async (req, res) => {
   try {
     const { symbol, initial_balance, preset, spread_pips } = req.body;
     if (!symbol) {
@@ -318,7 +386,7 @@ router.get('/risk/:userId', async (req, res) => {
 // @route   POST /api/engine/risk/preset
 // @desc    Change risk preset (proxies to Python engine)
 // @access  Private
-router.post('/risk/preset', protect, async (req, res) => {
+router.post('/risk/preset', protect, requireSubscription, async (req, res) => {
   try {
     const { preset, userId } = req.body;
     if (!preset || !['conservative', 'moderate', 'aggressive'].includes(preset)) {
@@ -349,37 +417,31 @@ router.post('/risk/preset', protect, async (req, res) => {
   }
 });
 
-router.get('/analysis/latest', protect, async (req, res) => {
+router.get('/analysis/latest', protect, requireSubscription, async (req, res) => {
   const result = await proxyGetToPython('/api/engine/analysis/latest');
   if (result.ok) return res.json(result.data);
   res.status(502).json({ message: 'Engine not available' });
 });
 
-router.get('/analysis/history', protect, async (req, res) => {
+router.get('/analysis/history', protect, requireSubscription, async (req, res) => {
   const result = await proxyGetToPython('/api/engine/analysis/history');
   if (result.ok) return res.json(result.data);
   res.status(502).json({ message: 'Engine not available' });
 });
 
-router.get('/signals/active', protect, async (req, res) => {
-  const result = await proxyGetToPython('/api/engine/signals/active');
-  if (result.ok) return res.json(result.data);
-  res.status(502).json({ message: 'Engine not available' });
-});
-
-router.get('/signals/active', protect, async (req, res) => {
+router.get('/signals/active', protect, requireSubscription, async (req, res) => {
   const result = await proxyGetToPython('/api/engine/signals/active');
   if (result.ok) return res.json(result.data);
   return res.status(result.status || 502).json(result.data || { message: 'Engine not available' });
 });
 
-router.get('/auto-trade/status', protect, async (req, res) => {
+router.get('/auto-trade/status', protect, requireSubscription, async (req, res) => {
   const result = await proxyGetToPython('/api/engine/auto-trade/status');
   if (result.ok) return res.json(result.data);
   res.status(502).json({ message: 'Engine not available' });
 });
 
-router.post('/test-fire-trade', protect, async (req, res) => {
+router.post('/test-fire-trade', protect, requireSubscription, async (req, res) => {
   const { symbol, direction } = req.body;
   const result = await proxyPostToPython('/api/engine/test-fire-trade', {
     symbol: symbol || 'XAUUSD',
@@ -389,7 +451,7 @@ router.post('/test-fire-trade', protect, async (req, res) => {
   return res.status(result.status || 502).json(result.data || { message: 'Engine not available' });
 });
 
-router.post('/auto-trade/toggle', protect, async (req, res) => {
+router.post('/auto-trade/toggle', protect, requireSubscription, async (req, res) => {
   const { enabled } = req.body;
   if (typeof enabled !== 'boolean') {
     return res.status(400).json({ message: 'enabled (boolean) is required' });
