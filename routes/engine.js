@@ -207,7 +207,22 @@ router.post('/signal/result', async (req, res) => {
 // @access  Internal
 router.post('/trade', async (req, res) => {
   try {
-    const trade = await AITrade.create(req.body);
+    const body = req.body || {};
+    const trade = await AITrade.create({
+      symbol: body.symbol || 'UNKNOWN',
+      type: body.type || body.action || 'UNKNOWN',
+      entry: body.entry ?? body.price ?? 0,
+      sl: body.sl ?? body.stopLoss,
+      tp: body.tp ?? body.takeProfit,
+      lotSize: body.lot_size ?? body.lotSize,
+      confidence: body.confidence || 0,
+      status: body.status || 'executed',
+      profit: body.profit || 0,
+      ticket: body.ticket,
+      session: body.session,
+      amdPhase: body.amdPhase ?? body.amd_phase,
+      h4Bias: body.h4Bias ?? body.h4_bias,
+    });
     res.json({ received: true, tradeId: trade._id });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
