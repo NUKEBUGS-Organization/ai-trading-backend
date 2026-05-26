@@ -1,12 +1,14 @@
 const PAID_PLANS = ['starter', 'professional', 'enterprise'];
+const DEMO_EMAILS = ['demo@gmail.com', 'demo@aurumx.com'];
 
 /**
  * Active paid subscription: not free, status active, not expired.
- * Admins always pass.
+ * Admins and seeded demo accounts bypass (dashboard testing).
  */
 function hasActiveSubscription(user) {
   if (!user) return false;
   if (user.role === 'admin') return true;
+  if (DEMO_EMAILS.includes(String(user.email || '').toLowerCase())) return true;
 
   const sub = user.subscription || {};
   const plan = sub.plan || 'free';

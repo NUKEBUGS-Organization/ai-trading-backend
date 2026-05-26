@@ -6,10 +6,34 @@ const { requireSubscription } = require('../middleware/subscription');
 const router = express.Router();
 const wsHub = require('../wsHub');
 
-const PYTHON_ENGINE_URL = process.env.PYTHON_ENGINE_URL || 'http://localhost:8000';
 const PYTHON_ENGINE_INTERNAL_URL =
   process.env.PYTHON_ENGINE_INTERNAL_URL ||
   'http://srv-captain--ai-tradingbot-python-engine:8000';
+
+const PYTHON_ENGINE_URL =
+  process.env.PYTHON_ENGINE_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? 'https://ai-tradingbot-python-engine.vcl4xengine.com'
+    : 'http://localhost:8000');
+
+/** CapRover: try public HTTPS first, then internal DNS; avoid localhost in production. */
+function getPythonEngineBases() {
+  const bases = [];
+  const publicUrl = (PYTHON_ENGINE_URL || '').replace(/\/$/, '');
+  const internalUrl = (PYTHON_ENGINE_INTERNAL_URL || '').replace(/\/$/, '');
+  const isLocal = (url) => /localhost|127\.0\.0\.1/.test(url);
+
+  if (publicUrl && !(process.env.NODE_ENV === 'production' && isLocal(publicUrl))) {
+    bases.push(publicUrl);
+  }
+  if (internalUrl && internalUrl !== publicUrl) {
+    bases.push(internalUrl);
+  }
+  if (publicUrl && isLocal(publicUrl)) {
+    bases.push(publicUrl);
+  }
+  return [...new Set(bases.filter(Boolean))];
+}
 
 // Store engine status in memory (updated by Python engine)
 let engineStatus = {
@@ -56,7 +80,7 @@ async function fetchEngineStatus(baseUrl) {
 }
 
 router.get('/status', protect, async (req, res) => {
-  const bases = [...new Set([PYTHON_ENGINE_URL, PYTHON_ENGINE_INTERNAL_URL])];
+  const bases = getPythonEngineBases();
 
   for (let i = 0; i < bases.length; i++) {
     const base = bases[i];
@@ -206,7 +230,7 @@ router.get('/trades', protect, requireSubscription, async (req, res) => {
 // @desc    Run AI market analysis (proxies to Python engine)
 // @access  Private
 async function proxyGetToPython(path) {
-  const bases = [...new Set([PYTHON_ENGINE_URL, PYTHON_ENGINE_INTERNAL_URL])];
+  const bases = getPythonEngineBases();
   let lastStatus = 502;
   let lastData = { message: 'Python engine unreachable' };
   for (const base of bases) {
@@ -233,7 +257,7 @@ async function proxyGetToPython(path) {
 }
 
 async function proxyPostToPython(path, body, timeoutMs = 60000) {
-  const bases = [...new Set([PYTHON_ENGINE_URL, PYTHON_ENGINE_INTERNAL_URL])];
+  const bases = getPythonEngineBases();
   let lastError = null;
 
   for (let i = 0; i < bases.length; i++) {
