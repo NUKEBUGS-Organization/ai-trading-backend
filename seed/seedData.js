@@ -43,6 +43,7 @@ const seedData = async () => {
     await Trade.deleteMany({});
     await Signal.deleteMany({});
     await Subscription.deleteMany({});
+    // Signals are created only by the Python engine (POST /api/engine/signal), not in seed.
 
     // Create Admin User
     console.log('👤 Creating users...');
@@ -238,39 +239,6 @@ const seedData = async () => {
           pips: Math.floor(unrealizedPips)
         });
       }
-    }
-
-    // Create Signals
-    console.log('🤖 Creating AI signals...');
-    const biases = ['bullish', 'bearish', 'neutral', 'ranging'];
-    const volatilities = ['low', 'medium', 'high', 'extreme'];
-    const statuses = ['active', 'executed', 'expired'];
-
-    for (let i = 0; i < 25; i++) {
-      const direction = ['BUY', 'SELL', 'NEUTRAL'][Math.floor(Math.random() * 3)];
-      const entryPrice = randomBetween(2320, 2400);
-
-      await Signal.create({
-        symbol: 'XAUUSD',
-        direction,
-        confidence: Math.floor(randomBetween(40, 98)),
-        entryPrice: parseFloat(entryPrice.toFixed(2)),
-        stopLoss: direction === 'BUY' ? parseFloat((entryPrice - randomBetween(8, 20)).toFixed(2)) : parseFloat((entryPrice + randomBetween(8, 20)).toFixed(2)),
-        takeProfit: direction === 'BUY' ? parseFloat((entryPrice + randomBetween(10, 35)).toFixed(2)) : parseFloat((entryPrice - randomBetween(10, 35)).toFixed(2)),
-        marketBias: biases[Math.floor(Math.random() * biases.length)],
-        volatility: volatilities[Math.floor(Math.random() * volatilities.length)],
-        session: sessions[Math.floor(Math.random() * sessions.length)],
-        qualityScore: parseFloat(randomBetween(3, 9.5).toFixed(1)),
-        strategy: strategies[Math.floor(Math.random() * strategies.length)],
-        indicators: {
-          rsi: parseFloat(randomBetween(20, 80).toFixed(1)),
-          macd: ['bullish', 'bearish', 'neutral'][Math.floor(Math.random() * 3)],
-          ema: ['bullish', 'bearish', 'neutral'][Math.floor(Math.random() * 3)],
-          atr: parseFloat(randomBetween(8, 35).toFixed(1)),
-          volume: ['low', 'normal', 'high'][Math.floor(Math.random() * 3)]
-        },
-        status: i < 8 ? 'active' : statuses[Math.floor(Math.random() * statuses.length)]
-      });
     }
 
     console.log('\n✅ Seed data created successfully!');
