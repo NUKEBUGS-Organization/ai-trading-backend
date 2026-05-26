@@ -6,22 +6,35 @@ const router = express.Router();
 
 const MOCK_DEMO = {
   'admin@aurumx.com': {
-    password: process.env.MOCK_ADMIN_PASSWORD || 'AdminX@2026!#',
+    password: process.env.MOCK_ADMIN_PASSWORD || 'admin123',
     user: {
       _id: 'admin123',
       name: 'Admin',
       email: 'admin@aurumx.com',
       role: 'admin',
+      subscription: { plan: 'enterprise', status: 'active', expiresAt: new Date(Date.now() + 365 * 86400000) },
     },
     token: 'mock-admin-token',
   },
-  'demo@aurumx.com': {
-    password: process.env.MOCK_DEMO_PASSWORD || 'DemoX@2026!#',
+  'demo@gmail.com': {
+    password: process.env.MOCK_DEMO_PASSWORD || 'demo123',
     user: {
       _id: 'user123',
-      name: 'Demo User',
-      email: 'demo@aurumx.com',
+      name: 'Demo Trader',
+      email: 'demo@gmail.com',
       role: 'user',
+      subscription: { plan: 'professional', status: 'active', expiresAt: new Date(Date.now() + 30 * 86400000) },
+    },
+    token: 'mock-user-token',
+  },
+  'demo@aurumx.com': {
+    password: process.env.MOCK_DEMO_PASSWORD || 'demo123',
+    user: {
+      _id: 'user123',
+      name: 'Demo Trader',
+      email: 'demo@gmail.com',
+      role: 'user',
+      subscription: { plan: 'professional', status: 'active', expiresAt: new Date(Date.now() + 30 * 86400000) },
     },
     token: 'mock-user-token',
   },
@@ -126,7 +139,7 @@ router.post('/login', async (req, res) => {
     if (!isDbReady()) {
       const mock = mockLogin(normalizedEmail, password);
       if (mock) return res.json(mock);
-      return res.status(503).json({ message: 'Database unavailable. Demo: admin@aurumx.com / demo@aurumx.com' });
+      return res.status(503).json({ message: 'Database unavailable. Demo: demo@gmail.com / demo123 or admin@aurumx.com / admin123' });
     }
 
     const user = await User.findOne({ email: normalizedEmail }).select('+password');

@@ -22,10 +22,10 @@ const protect = async (req, res, next) => {
     if (token === 'mock-user-token') {
       req.user = {
         _id: 'user123',
-        name: 'Demo User',
-        email: 'demo@aurumx.com',
+        name: 'Demo Trader',
+        email: 'demo@gmail.com',
         role: 'user',
-        subscription: { plan: 'free', status: 'active', expiresAt: new Date(Date.now() + 30 * 86400000) },
+        subscription: { plan: 'professional', status: 'active', expiresAt: new Date(Date.now() + 30 * 86400000) },
       };
       return next();
     }
