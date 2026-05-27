@@ -456,16 +456,24 @@ router.post('/risk/preset', protect, requireSubscription, async (req, res) => {
   }
 });
 
-router.get('/analysis/latest', protect, requireSubscription, async (req, res) => {
-  const result = await proxyGetToPython('/api/engine/analysis/latest');
-  if (result.ok) return res.json(result.data);
-  res.status(502).json({ message: 'Engine not available' });
+router.get('/analysis/latest', protect, async (req, res) => {
+  try {
+    const result = await proxyGetToPython('/api/engine/analysis/latest');
+    if (result.ok) return res.json(result.data);
+    res.status(502).json({ message: 'Engine not available' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
 });
 
-router.get('/analysis/history', protect, requireSubscription, async (req, res) => {
-  const result = await proxyGetToPython('/api/engine/analysis/history');
-  if (result.ok) return res.json(result.data);
-  res.status(502).json({ message: 'Engine not available' });
+router.get('/analysis/history', protect, async (req, res) => {
+  try {
+    const result = await proxyGetToPython('/api/engine/analysis/history');
+    if (result.ok) return res.json(result.data);
+    res.status(502).json({ message: 'Engine not available' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
 });
 
 router.get('/signals/active', protect, requireSubscription, async (req, res) => {
