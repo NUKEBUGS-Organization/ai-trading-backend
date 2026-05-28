@@ -422,6 +422,22 @@ router.get('/risk/:userId', async (req, res) => {
   }
 });
 
+router.get('/risk/admin', async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const admin = await User.findOne({ role: 'admin' });
+    if (admin) {
+      return res.json({
+        preset: admin.riskSettings?.preset || 'moderate',
+        settings: admin.riskSettings,
+      });
+    }
+    res.json({ preset: 'moderate' });
+  } catch (error) {
+    res.status(500).json({ preset: 'moderate' });
+  }
+});
+
 // @route   POST /api/engine/risk/preset
 // @desc    Change risk preset (proxies to Python engine)
 // @access  Private
@@ -445,7 +461,16 @@ router.post('/risk/preset', protect, requireSubscription, async (req, res) => {
       };
       await User.findByIdAndUpdate(
         userId || req.user._id,
-        { riskSettings: { ...presetSettings[preset], dynamicLotSizing: true, spreadProtection: true, newsFilter: true } }
+        {
+          'riskSettings.preset': preset,
+          riskSettings: {
+            ...presetSettings[preset],
+            preset,
+            dynamicLotSizing: true,
+            spreadProtection: true,
+            newsFilter: true,
+          },
+        }
       );
     }
 
