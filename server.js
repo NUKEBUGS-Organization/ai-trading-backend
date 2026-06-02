@@ -39,6 +39,7 @@ app.use('/api/subscriptions', require('./routes/subscriptions'));
 app.use('/api/engine', require('./routes/engine'));
 app.use('/api/public', require('./routes/public'));
 app.use('/api/licenses', require('./routes/licenses'));
+app.use('/api/referral', require('./routes/referral'));
 
 // Health check
 app.get('/api/health', (req, res) => {

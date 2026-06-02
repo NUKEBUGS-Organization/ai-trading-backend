@@ -69,6 +69,28 @@ const userSchema = new mongoose.Schema({
     weeklyPnl: { type: Number, default: 0 },
     monthlyPnl: { type: Number, default: 0 },
     maxDrawdown: { type: Number, default: 0 }
+  },
+  referralCode: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  referredBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  totalReferrals: {
+    type: Number,
+    default: 0
+  },
+  totalCommissionEarned: {
+    type: Number,
+    default: 0
+  },
+  pendingCommission: {
+    type: Number,
+    default: 0
   }
 }, {
   timestamps: true

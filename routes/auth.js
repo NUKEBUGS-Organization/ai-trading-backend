@@ -1,6 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Referral = require('../models/Referral');
 const { protect } = require('../middleware/auth');
 const router = express.Router();
 
@@ -107,6 +108,27 @@ router.post('/register', async (req, res) => {
         freeMargin: 10000,
       },
     });
+
+    const refCode = req.body.referralCode || req.query.ref;
+    if (refCode) {
+      try {
+        const referrer = await User.findOne({ referralCode: refCode });
+        if (referrer && referrer._id.toString() !== user._id.toString()) {
+          await Referral.create({
+            referrerId: referrer._id,
+            referredUserId: user._id,
+            referralCode: refCode,
+            referralLink: `${process.env.DASHBOARD_URL || 'https://ai-tradingbot-frontend.vcl4xengine.com'}/register?ref=${refCode}`,
+            status: 'registered',
+            commissionRate: 20
+          });
+          await User.findByIdAndUpdate(user._id, { referredBy: referrer._id });
+          await User.findByIdAndUpdate(referrer._id, { $inc: { totalReferrals: 1 } });
+        }
+      } catch (refErr) {
+        console.log('Referral tracking error:', refErr.message);
+      }
+    }
 
     const token = generateToken(user._id);
 
