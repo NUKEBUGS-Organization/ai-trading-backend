@@ -26,7 +26,7 @@ const referralSchema = new mongoose.Schema({
   },
   commissionRate: {
     type: Number,
-    default: 20
+    default: 25
   },
   commissionAmount: {
     type: Number,

@@ -120,7 +120,7 @@ router.post('/register', async (req, res) => {
             referralCode: refCode,
             referralLink: `${process.env.DASHBOARD_URL || 'https://ai-tradingbot-frontend.vcl4xengine.com'}/register?ref=${refCode}`,
             status: 'registered',
-            commissionRate: 20
+            commissionRate: 25
           });
           await User.findByIdAndUpdate(user._id, { referredBy: referrer._id });
           await User.findByIdAndUpdate(referrer._id, { $inc: { totalReferrals: 1 } });

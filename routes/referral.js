@@ -6,7 +6,7 @@ const Referral = require('../models/Referral');
 const { protect, adminOnly } = require('../middleware/auth');
 
 const DASHBOARD_URL = process.env.DASHBOARD_URL || 'https://ai-tradingbot-frontend.vcl4xengine.com';
-const DEFAULT_COMMISSION_RATE = 20;
+const DEFAULT_COMMISSION_RATE = 25;
 
 function generateReferralCode(userId) {
   const hash = crypto.createHash('md5').update(userId.toString()).digest('hex');
