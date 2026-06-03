@@ -5,35 +5,29 @@ const Referral = require('../models/Referral');
 const { protect } = require('../middleware/auth');
 const router = express.Router();
 
+const ADMIN_EMAIL = (process.env.DEFAULT_ADMIN_EMAIL || 'admin@vcl4xengine.com').toLowerCase();
+const ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || 'AdminX@2026!#';
+const USER_EMAIL = (process.env.DEFAULT_USER_EMAIL || 'trader@vcl4xengine.com').toLowerCase();
+const USER_PASSWORD = process.env.DEFAULT_USER_PASSWORD || 'DemoX@2026!#';
+
 const MOCK_DEMO = {
-  'admin@aurumx.com': {
-    password: process.env.MOCK_ADMIN_PASSWORD || 'admin123',
+  [ADMIN_EMAIL]: {
+    password: process.env.MOCK_ADMIN_PASSWORD || ADMIN_PASSWORD,
     user: {
       _id: 'admin123',
-      name: 'Admin',
-      email: 'admin@aurumx.com',
+      name: 'VCL4X Admin',
+      email: ADMIN_EMAIL,
       role: 'admin',
       subscription: { plan: 'enterprise', status: 'active', expiresAt: new Date(Date.now() + 365 * 86400000) },
     },
     token: 'mock-admin-token',
   },
-  'demo@gmail.com': {
-    password: process.env.MOCK_DEMO_PASSWORD || 'demo123',
+  [USER_EMAIL]: {
+    password: process.env.MOCK_DEMO_PASSWORD || USER_PASSWORD,
     user: {
       _id: 'user123',
-      name: 'Demo Trader',
-      email: 'demo@gmail.com',
-      role: 'user',
-      subscription: { plan: 'professional', status: 'active', expiresAt: new Date(Date.now() + 30 * 86400000) },
-    },
-    token: 'mock-user-token',
-  },
-  'demo@aurumx.com': {
-    password: process.env.MOCK_DEMO_PASSWORD || 'demo123',
-    user: {
-      _id: 'user123',
-      name: 'Demo Trader',
-      email: 'demo@gmail.com',
+      name: 'VCL4X Trader',
+      email: USER_EMAIL,
       role: 'user',
       subscription: { plan: 'professional', status: 'active', expiresAt: new Date(Date.now() + 30 * 86400000) },
     },
@@ -161,7 +155,7 @@ router.post('/login', async (req, res) => {
     if (!isDbReady()) {
       const mock = mockLogin(normalizedEmail, password);
       if (mock) return res.json(mock);
-      return res.status(503).json({ message: 'Database unavailable. Demo: demo@gmail.com / demo123 or admin@aurumx.com / admin123' });
+      return res.status(503).json({ message: 'Database unavailable. Try again later or contact support.' });
     }
 
     const user = await User.findOne({ email: normalizedEmail }).select('+password');

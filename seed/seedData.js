@@ -8,6 +8,11 @@ const Subscription = require('../models/Subscription');
 
 const connectDB = require('../config/db');
 
+const ADMIN_EMAIL = (process.env.DEFAULT_ADMIN_EMAIL || 'admin@vcl4xengine.com').toLowerCase();
+const ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || 'AdminX@2026!#';
+const USER_EMAIL = (process.env.DEFAULT_USER_EMAIL || 'trader@vcl4xengine.com').toLowerCase();
+const USER_PASSWORD = process.env.DEFAULT_USER_PASSWORD || 'DemoX@2026!#';
+
 const symbols = ['XAUUSD', 'XAUUSD', 'XAUUSD', 'EURUSD', 'GBPUSD'];
 const strategies = ['AI Momentum', 'AI Scalper', 'Grid Recovery', 'Trend Follower', 'Mean Reversion'];
 const sessions = ['asian', 'london', 'newyork', 'overlap'];
@@ -48,9 +53,9 @@ const seedData = async () => {
     // Create Admin User
     console.log('👤 Creating users...');
     const admin = await User.create({
-      name: 'Admin',
-      email: 'admin@aurumx.com',
-      password: 'admin123',
+      name: 'VCL4X Admin',
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
       role: 'admin',
       isActive: true,
       subscription: { plan: 'enterprise', status: 'active', expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) },
@@ -77,9 +82,9 @@ const seedData = async () => {
 
     // Create Demo User
     const demoUser = await User.create({
-      name: 'Demo Trader',
-      email: 'demo@gmail.com',
-      password: 'demo123',
+      name: 'VCL4X Trader',
+      email: USER_EMAIL,
+      password: USER_PASSWORD,
       role: 'user',
       isActive: true,
       subscription: { plan: 'professional', status: 'active', expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
@@ -243,8 +248,9 @@ const seedData = async () => {
 
     console.log('\n✅ Seed data created successfully!');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('📧 Admin Login:  admin@aurumx.com / admin123');
-    console.log('📧 Demo Login:   demo@gmail.com / demo123');
+    console.log('📧 Admin Login:  ', ADMIN_EMAIL);
+    console.log('📧 Trader Login: ', USER_EMAIL);
+    console.log('   (passwords from DEFAULT_* env or AdminX@2026!# / DemoX@2026!#)');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     process.exit(0);
