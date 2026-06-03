@@ -26,16 +26,67 @@ async function proxyGetToPython(path) {
 // @route   GET /api/signals
 // @desc    Get active signals from the AI engine only (no seed/demo rows)
 // @access  Private
+function mapEngineSignalToRow(raw) {
+  const confidence = Number(raw.confidence) || 0;
+  return {
+    _id: raw.id || raw.engineSignalId || `${raw.symbol}-${raw.timestamp || Date.now()}`,
+    symbol: raw.symbol,
+    direction: raw.direction || raw.type,
+    confidence,
+    entryPrice: raw.entry ?? raw.entryPrice,
+    stopLoss: raw.sl ?? raw.stopLoss,
+    takeProfit: raw.tp ?? raw.takeProfit,
+    grade: raw.grade || '',
+    amdPhase: raw.amd_phase || raw.amdPhase || '',
+    marketBias: raw.h4_bias || raw.h4Bias || 'neutral',
+    h4Bias: raw.h4_bias || raw.h4Bias,
+    session: raw.session || 'london',
+    riskLevel: raw.risk_level || raw.riskLevel || '',
+    strategy: raw.strategy || 'AMD AI Engine',
+    reason: raw.reason || 'Signal generated',
+    engineSignalId: raw.id || raw.engineSignalId || '',
+    status: 'active',
+    createdAt: raw.timestamp || new Date().toISOString(),
+    priceSource: raw.price_source || raw.priceSource,
+  };
+}
+
+function mergeActiveSignals(dbSignals, engineSignals) {
+  const bySymbol = new Map();
+  const add = (row) => {
+    if (!row?.symbol || !row?.direction) return;
+    const sym = String(row.symbol).toUpperCase();
+    const existing = bySymbol.get(sym);
+    const rowTime = new Date(row.createdAt || 0).getTime();
+    const existingTime = existing ? new Date(existing.createdAt || 0).getTime() : 0;
+    if (!existing || rowTime >= existingTime) {
+      bySymbol.set(sym, row);
+    }
+  };
+  for (const s of engineSignals) add(mapEngineSignalToRow(s));
+  for (const s of dbSignals) add(s.toObject ? s.toObject() : s);
+  return [...bySymbol.values()].sort(
+    (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+  );
+}
+
 router.get('/', protect, requireSubscription, async (req, res) => {
   try {
     const mongoose = require('mongoose');
     if (mongoose.connection.readyState !== 1) {
+      const engineOnly = await proxyGetToPython('/api/engine/signals/active');
+      if (engineOnly?.ok && engineOnly.data?.signals?.length) {
+        return res.json(alignSignalsList(engineOnly.data.signals.map(mapEngineSignalToRow)));
+      }
       return res.json([]);
     }
-    const signals = await Signal.find({ status: 'active', ...REAL_SIGNAL_QUERY })
+    const dbSignals = await Signal.find({ status: 'active', ...REAL_SIGNAL_QUERY })
       .sort({ createdAt: -1 })
       .limit(50);
-    res.json(alignSignalsList(signals));
+    const engineResult = await proxyGetToPython('/api/engine/signals/active');
+    const engineSignals = engineResult?.ok ? engineResult.data?.signals || [] : [];
+    const merged = mergeActiveSignals(dbSignals, engineSignals);
+    res.json(alignSignalsList(merged));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

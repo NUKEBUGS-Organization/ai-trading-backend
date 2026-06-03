@@ -115,6 +115,15 @@ router.post('/signal', async (req, res) => {
     const grade = signalData.grade || '';
     const confidence = Number(signalData.confidence) || 0;
 
+    await Signal.updateMany(
+      {
+        symbol: signalData.symbol,
+        status: 'active',
+        strategy: signalData.strategy || 'AMD AI Engine',
+      },
+      { $set: { status: 'expired' } }
+    );
+
     const signal = await Signal.create({
       symbol: signalData.symbol,
       direction: signalData.direction,
