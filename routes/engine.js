@@ -1,6 +1,7 @@
 const express = require('express');
 const AITrade = require('../models/AITrade');
 const Signal = require('../models/Signal');
+const { PRODUCT_STRATEGY_NAME, LEGACY_STRATEGY_NAMES } = require('../utils/realSignals');
 const { protect, adminOnly } = require('../middleware/auth');
 const { requireSubscription } = require('../middleware/subscription');
 const router = express.Router();
@@ -119,7 +120,9 @@ router.post('/signal', async (req, res) => {
       {
         symbol: signalData.symbol,
         status: 'active',
-        strategy: signalData.strategy || 'AMD AI Engine',
+        strategy: {
+          $in: [signalData.strategy || PRODUCT_STRATEGY_NAME, ...LEGACY_STRATEGY_NAMES],
+        },
       },
       { $set: { status: 'expired' } }
     );
@@ -134,7 +137,7 @@ router.post('/signal', async (req, res) => {
       marketBias: signalData.h4_bias || signalData.h4Bias || signalData.marketBias || 'neutral',
       session: signalData.session || 'london',
       qualityScore: signalData.qualityScore ?? (confidence / 10),
-      strategy: signalData.strategy || 'AMD AI Engine',
+      strategy: signalData.strategy || PRODUCT_STRATEGY_NAME,
       grade,
       amdPhase: signalData.amdPhase || signalData.amd_phase || '',
       reason: signalData.reason || '',

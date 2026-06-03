@@ -2,6 +2,8 @@ const express = require('express');
 const Signal = require('../models/Signal');
 const { alignSignalsList } = require('../utils/alignSignalPrices');
 
+const { PRODUCT_STRATEGY_NAME } = require('../utils/realSignals');
+
 const router = express.Router();
 
 const PYTHON_ENGINE_URL = process.env.PYTHON_ENGINE_URL || 'http://localhost:8000';
@@ -50,7 +52,10 @@ function sanitizePublicSignal(raw) {
     confidence,
     grade,
     session: raw.session || 'london',
-    strategy: raw.strategy || 'AMD AI Engine',
+    strategy:
+      raw.strategy === 'AMD AI Engine' || !raw.strategy
+        ? PRODUCT_STRATEGY_NAME
+        : raw.strategy,
     amdPhase: raw.amd_phase || raw.amdPhase || null,
     h4Bias: raw.h4_bias || raw.h4Bias || raw.marketBias || null,
     status: raw.status || 'active',

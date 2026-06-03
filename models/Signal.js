@@ -73,7 +73,7 @@ const signalSchema = new mongoose.Schema({
   },
   strategy: {
     type: String,
-    default: 'AMD AI Engine'
+    default: 'AI Market Insights System'
   },
   indicators: {
     rsi: { type: Number, default: 50 },

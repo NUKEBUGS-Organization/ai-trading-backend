@@ -3,7 +3,7 @@ const Signal = require('../models/Signal');
 const { protect } = require('../middleware/auth');
 const { requireSubscription } = require('../middleware/subscription');
 const { alignSignalsList } = require('../utils/alignSignalPrices');
-const { REAL_SIGNAL_QUERY } = require('../utils/realSignals');
+const { REAL_SIGNAL_QUERY, PRODUCT_STRATEGY_NAME } = require('../utils/realSignals');
 const router = express.Router();
 
 const PYTHON_ENGINE_URL = process.env.PYTHON_ENGINE_URL || 'http://localhost:8000';
@@ -42,7 +42,10 @@ function mapEngineSignalToRow(raw) {
     h4Bias: raw.h4_bias || raw.h4Bias,
     session: raw.session || 'london',
     riskLevel: raw.risk_level || raw.riskLevel || '',
-    strategy: raw.strategy || 'AMD AI Engine',
+    strategy:
+      raw.strategy === 'AMD AI Engine' || !raw.strategy
+        ? PRODUCT_STRATEGY_NAME
+        : raw.strategy,
     reason: raw.reason || 'Signal generated',
     engineSignalId: raw.id || raw.engineSignalId || '',
     status: 'active',
