@@ -33,7 +33,7 @@ function alignSignalToLivePrices(signal, prices = getCachedMt5Prices()) {
 
   const oldEntry = Number(signal.entryPrice ?? signal.entry);
   const delta = Number.isFinite(oldEntry) ? liveEntry - oldEntry : 0;
-  const digits = sym === 'XAUUSD' ? 2 : 5;
+  const digits = sym === 'XAUUSD' ? 2 : (sym === 'USDJPY' || sym === 'GBPJPY' ? 3 : 5);
   const round = (v) => (v == null || !Number.isFinite(Number(v)) ? v : Number((Number(v) + delta).toFixed(digits)));
 
   const doc = signal.toObject ? signal.toObject() : { ...signal };

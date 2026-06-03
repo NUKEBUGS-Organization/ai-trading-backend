@@ -35,7 +35,9 @@ function symbolMatchesConfig(configSym, brokerKey) {
   const ku = String(brokerKey).toUpperCase().replace(/\.$/, '');
   if (ku === sym || ku.startsWith(sym) || sym.startsWith(ku.replace(/M$/, ''))) return true;
   if (sym === 'XAUUSD' && (ku.includes('XAU') || ku === 'GOLD')) return true;
-  if (sym === 'GBPUSD' && ku.includes('GBP') && ku.includes('USD')) return true;
+  if (sym === 'GBPJPY' && ku.includes('GBP') && ku.includes('JPY')) return true;
+  if (sym === 'USDJPY' && ku.includes('USD') && ku.includes('JPY') && !ku.includes('GBP')) return true;
+  if (sym === 'GBPUSD' && ku.includes('GBP') && ku.includes('USD') && !ku.includes('JPY')) return true;
   if (sym === 'EURUSD' && ku.includes('EUR') && ku.includes('USD')) return true;
   return false;
 }
@@ -43,6 +45,7 @@ function symbolMatchesConfig(configSym, brokerKey) {
 function isPlausibleLiveQuote(configSym, bid) {
   if (bid == null || bid <= 0) return false;
   if (configSym === 'EURUSD' || configSym === 'GBPUSD') return bid > 0.5 && bid < 3.5;
+  if (configSym === 'USDJPY' || configSym === 'GBPJPY') return bid > 80 && bid < 400;
   if (configSym === 'XAUUSD') return bid > 500 && bid < 20000;
   return true;
 }
@@ -65,7 +68,7 @@ function normalizePricesForWs(prices) {
     };
   }
 
-  const configSymbols = ['XAUUSD', 'EURUSD', 'GBPUSD'];
+  const configSymbols = ['XAUUSD', 'EURUSD', 'GBPUSD', 'USDJPY', 'GBPJPY', 'XTIUSD'];
   for (const configSym of configSymbols) {
     if (out[configSym] && isPlausibleLiveQuote(configSym, out[configSym].bid)) continue;
     for (const [brokerKey, q] of Object.entries(prices)) {

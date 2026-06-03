@@ -30,7 +30,8 @@ async function proxyGetToPython(path) {
 
 function formatPrice(symbol, value) {
   if (value == null || !Number.isFinite(Number(value))) return null;
-  const digits = String(symbol).toUpperCase() === 'XAUUSD' ? 2 : 5;
+  const sym = String(symbol).toUpperCase();
+  const digits = sym === 'XAUUSD' ? 2 : (sym === 'USDJPY' || sym === 'GBPJPY' ? 3 : 5);
   return Number(Number(value).toFixed(digits));
 }
 
