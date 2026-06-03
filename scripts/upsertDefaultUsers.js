@@ -1,89 +1,50 @@
 /**
  * Create or update default admin + trader accounts (does not wipe other data).
- * Run: node scripts/upsertDefaultUsers.js
+ * Run: npm run upsert-users
  */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
-const connectDB = require('../config/db');
-const User = require('../models/User');
-
-const ADMIN_EMAIL = (process.env.DEFAULT_ADMIN_EMAIL || 'admin@vcl4xengine.com').toLowerCase();
-const ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || 'AdminX@2026!#';
-const USER_EMAIL = (process.env.DEFAULT_USER_EMAIL || 'trader@vcl4xengine.com').toLowerCase();
-const USER_PASSWORD = process.env.DEFAULT_USER_PASSWORD || 'DemoX@2026!#';
-
-const LEGACY_EMAILS = ['admin@aurumx.com', 'demo@gmail.com', 'demo@aurumx.com'];
-
-async function upsertUser({ email, password, name, role, plan }) {
-  let user = await User.findOne({ email }).select('+password');
-  if (user) {
-    user.name = name;
-    user.password = password;
-    user.role = role;
-    user.isActive = true;
-    user.subscription = {
-      plan,
-      status: 'active',
-      expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-    };
-    await user.save();
-    return { email, action: 'updated' };
-  }
-  await User.create({
-    name,
-    email,
-    password,
-    role,
-    isActive: true,
-    subscription: {
-      plan,
-      status: 'active',
-      expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-    },
-    mt5Account: {
-      accountId: role === 'admin' ? 'MT5-900001' : 'MT5-500042',
-      server: 'VCL4X-Live',
-      connected: true,
-      balance: role === 'admin' ? 125750.5 : 52430.8,
-      equity: role === 'admin' ? 128340.25 : 53210.45,
-      margin: role === 'admin' ? 4500 : 2100,
-      freeMargin: role === 'admin' ? 123840.25 : 51110.45,
-    },
-  });
-  return { email, action: 'created' };
-}
+const mongoose = require('mongoose');
+const { upsertDefaultUsers, ADMIN_EMAIL, USER_EMAIL } = require('../utils/defaultUsers');
 
 async function main() {
-  await connectDB();
-  const results = [];
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    console.error('❌ MONGODB_URI is not set in .env');
+    process.exit(1);
+  }
 
-  results.push(await upsertUser({
-    email: ADMIN_EMAIL,
-    password: ADMIN_PASSWORD,
-    name: 'VCL4X Admin',
-    role: 'admin',
-    plan: 'enterprise',
-  }));
+  mongoose.set('bufferCommands', false);
+  try {
+    await mongoose.connect(uri, { serverSelectionTimeoutMS: 15000 });
+    console.log(`✅ MongoDB Connected: ${mongoose.connection.host}`);
+  } catch (error) {
+    console.error(`❌ MongoDB Connection Error: ${error.message}`);
+    console.error('');
+    console.error('If using MongoDB Atlas from your PC:');
+    console.error('  1. Atlas → Network Access → add your IP (or 0.0.0.0/0 for testing)');
+    console.error('  2. Check MONGODB_URI username/password in .env');
+    console.error('  3. Or run upsert on CapRover: set AUTO_UPSERT_DEFAULT_USERS=true and redeploy backend');
+    process.exit(1);
+  }
 
-  results.push(await upsertUser({
-    email: USER_EMAIL,
-    password: USER_PASSWORD,
-    name: 'VCL4X Trader',
-    role: 'user',
-    plan: 'professional',
-  }));
-
-  const disabled = await User.updateMany(
-    { email: { $in: LEGACY_EMAILS } },
-    { $set: { isActive: false } }
-  );
-
+  const { results, disabledCount } = await upsertDefaultUsers();
   console.log('Default users upserted:');
   results.forEach((r) => console.log(`  ${r.action}: ${r.email}`));
-  console.log(`Legacy demo accounts disabled: ${disabled.modifiedCount}`);
+  console.log(`Legacy demo accounts disabled: ${disabledCount}`);
+  console.log('');
+  console.log('Login with:');
+  console.log(`  Admin:  ${ADMIN_EMAIL}`);
+  console.log(`  Trader: ${USER_EMAIL}`);
+  await mongoose.disconnect();
   process.exit(0);
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error(err);
+  try {
+    await mongoose.disconnect();
+  } catch {
+    /* ignore */
+  }
   process.exit(1);
 });

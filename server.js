@@ -5,8 +5,22 @@ const http = require('http');
 const { WebSocketServer } = require('ws');
 const connectDB = require('./config/db');
 
-// Connect to MongoDB
-connectDB();
+async function bootstrap() {
+  const dbReady = await connectDB();
+  if (dbReady && process.env.AUTO_UPSERT_DEFAULT_USERS === 'true') {
+    try {
+      const { upsertDefaultUsers } = require('./utils/defaultUsers');
+      const { results, disabledCount } = await upsertDefaultUsers();
+      console.log('👤 Default users upserted on startup:');
+      results.forEach((r) => console.log(`   ${r.action}: ${r.email}`));
+      console.log(`   Legacy accounts disabled: ${disabledCount}`);
+    } catch (err) {
+      console.error('❌ Default user upsert failed:', err.message);
+    }
+  }
+}
+
+bootstrap();
 
 const app = express();
 const server = http.createServer(app);
