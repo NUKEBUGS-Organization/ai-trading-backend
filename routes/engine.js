@@ -241,13 +241,107 @@ router.post('/trade', async (req, res) => {
   }
 });
 
+const DEFAULT_BALANCE = Number(process.env.DEFAULT_BALANCE || 10000);
+
+function mapEngineTradeStatusQuery(statusParam) {
+  const s = String(statusParam || '').toLowerCase();
+  if (s === 'open') {
+    return { status: { $in: ['pending', 'executed'] } };
+  }
+  if (s === 'closed') {
+    return { status: 'closed' };
+  }
+  return {};
+}
+
 // @route   GET /api/engine/trades
-// @desc    Get AI engine trades
+// @desc    Get AI engine trades (global — not user-scoped)
 // @access  Private
 router.get('/trades', protect, requireSubscription, async (req, res) => {
   try {
-    const trades = await AITrade.find().sort({ createdAt: -1 }).limit(50);
-    res.json(trades);
+    const { status, limit = 50 } = req.query;
+    const query = mapEngineTradeStatusQuery(status);
+    const cap = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
+    const trades = await AITrade.find(query).sort({ createdAt: -1 }).limit(cap);
+    res.json({ trades, total: trades.length });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   GET /api/engine/trades/stats
+// @desc    Trading stats from AITrade collection
+// @access  Private
+router.get('/trades/stats', protect, requireSubscription, async (req, res) => {
+  try {
+    const closed = await AITrade.find({
+      status: { $in: ['closed', 'executed'] },
+    }).lean();
+
+    const openTrades = await AITrade.countDocuments({
+      status: { $in: ['pending', 'executed'] },
+    });
+
+    const wins = closed.filter((t) => (t.profit ?? 0) > 0);
+    const losses = closed.filter((t) => (t.profit ?? 0) <= 0);
+    const totalProfit = closed.reduce((sum, t) => sum + (t.profit ?? 0), 0);
+    const grossProfit = wins.reduce((sum, t) => sum + (t.profit ?? 0), 0);
+    const grossLoss = Math.abs(
+      losses.reduce((sum, t) => sum + (t.profit ?? 0), 0)
+    );
+
+    res.json({
+      totalTrades: closed.length,
+      openTrades,
+      winRate: closed.length ? ((wins.length / closed.length) * 100).toFixed(1) : '0',
+      profitFactor:
+        grossLoss > 0
+          ? (grossProfit / grossLoss).toFixed(2)
+          : grossProfit > 0
+            ? '∞'
+            : '0',
+      totalProfit: totalProfit.toFixed(2),
+      startBalance: DEFAULT_BALANCE,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// @route   GET /api/engine/trades/equity-curve
+// @desc    Equity curve from closed AITrade P&L
+// @access  Private
+router.get('/trades/equity-curve', protect, requireSubscription, async (req, res) => {
+  try {
+    const closed = await AITrade.find({ status: 'closed' })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    let balance = DEFAULT_BALANCE;
+    const curve = [
+      {
+        date: new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0],
+        balance: parseFloat(balance.toFixed(2)),
+        profit: 0,
+      },
+    ];
+
+    closed.forEach((trade) => {
+      balance += trade.profit ?? 0;
+      const date = trade.closedAt
+        ? new Date(trade.closedAt).toISOString().split('T')[0]
+        : new Date(trade.createdAt).toISOString().split('T')[0];
+      curve.push({
+        date,
+        balance: parseFloat(balance.toFixed(2)),
+        profit: trade.profit ?? 0,
+      });
+    });
+
+    res.json({
+      startBalance: DEFAULT_BALANCE,
+      curve,
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
