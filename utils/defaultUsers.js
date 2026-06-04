@@ -13,6 +13,7 @@ async function upsertUser({ email, password, name, role, plan }) {
     user.password = password;
     user.role = role;
     user.isActive = true;
+    user.emailVerified = true;
     user.subscription = {
       plan,
       status: 'active',
@@ -27,6 +28,7 @@ async function upsertUser({ email, password, name, role, plan }) {
     password,
     role,
     isActive: true,
+    emailVerified: true,
     subscription: {
       plan,
       status: 'active',
