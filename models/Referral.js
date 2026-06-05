@@ -21,7 +21,7 @@ const referralSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'registered', 'subscribed', 'paid'],
+    enum: ['pending', 'registered', 'subscribed', 'paid', 'flagged'],
     default: 'pending'
   },
   commissionRate: {
@@ -52,7 +52,12 @@ const referralSchema = new mongoose.Schema({
   notes: {
     type: String,
     default: ''
-  }
+  },
+  referredUserIp: { type: String, default: null },
+  referredUserAgent: { type: String, default: null },
+  referrerIp: { type: String, default: null },
+  flagged: { type: Boolean, default: false },
+  flagReason: { type: String, default: null },
 }, { timestamps: true });
 
 referralSchema.index({ referralCode: 1 });

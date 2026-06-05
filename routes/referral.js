@@ -80,6 +80,14 @@ router.post('/generate', protect, async (req, res) => {
   }
 });
 
+const getClientIp = (req) => {
+  return req.headers['x-forwarded-for']?.split(',')[0]?.trim()
+    || req.headers['x-real-ip']
+    || req.connection?.remoteAddress
+    || req.socket?.remoteAddress
+    || null;
+};
+
 router.post('/track', async (req, res) => {
   try {
     const { referralCode, newUserId } = req.body;
@@ -92,22 +100,76 @@ router.post('/track', async (req, res) => {
       return res.status(404).json({ message: 'Invalid referral code' });
     }
 
-    if (referrer._id.toString() === newUserId) {
-      return res.status(400).json({ message: 'Cannot refer yourself' });
-    }
-
     const existing = await Referral.findOne({ referredUserId: newUserId });
     if (existing) {
       return res.json({ message: 'Already tracked' });
     }
+
+    const clientIp = getClientIp(req);
+    const userAgent = req.headers['user-agent'] || null;
+
+    // Fraud Check 1: Self-referral
+    if (referrer._id.toString() === newUserId.toString()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Self-referrals are not permitted.'
+      });
+    }
+
+    let flagged = false;
+    let flagReason = null;
+
+    // Fraud Check 2: Same IP as referrer's registration
+    if (clientIp) {
+      const referrerIpMatch = await Referral.findOne({
+        referredUserId: referrer._id,
+        referredUserIp: clientIp
+      });
+      if (referrerIpMatch) {
+        flagged = true;
+        flagReason = 'Same IP as referrer registration';
+      }
+    }
+
+    // Fraud Check 3: IP already used for another referral in last 30 days
+    if (clientIp) {
+      const recentIpReferral = await Referral.findOne({
+        referredUserIp: clientIp,
+        createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
+      });
+      if (recentIpReferral) {
+        flagged = true;
+        flagReason = flagReason
+          ? flagReason + ' + Duplicate IP within 30 days'
+          : 'Duplicate IP within 30 days';
+      }
+    }
+
+    // Fraud Check 4: Circular referral (new user already referred the referrer)
+    const circularCheck = await Referral.findOne({
+      referrerId: newUserId,
+      referredUserId: referrer._id
+    });
+    if (circularCheck) {
+      return res.status(400).json({
+        success: false,
+        message: 'Circular referrals are not permitted.'
+      });
+    }
+
+    const status = flagged ? 'flagged' : 'registered';
 
     const referral = await Referral.create({
       referrerId: referrer._id,
       referredUserId: newUserId,
       referralCode,
       referralLink: `${DASHBOARD_URL}/register?ref=${referralCode}`,
-      status: 'registered',
-      commissionRate: DEFAULT_COMMISSION_RATE
+      status,
+      commissionRate: DEFAULT_COMMISSION_RATE,
+      referredUserIp: clientIp,
+      referredUserAgent: userAgent,
+      flagged,
+      flagReason
     });
 
     await User.findByIdAndUpdate(newUserId, { referredBy: referrer._id });
@@ -116,7 +178,7 @@ router.post('/track', async (req, res) => {
       $inc: { totalReferrals: 1 }
     });
 
-    res.json({ success: true, referralId: referral._id });
+    res.json({ success: true, referralId: referral._id, flagged });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -155,6 +217,7 @@ router.get('/admin/all', protect, adminOnly, async (req, res) => {
         total: referrals.length,
         registered: referrals.filter(r => r.status !== 'pending').length,
         subscribed: referrals.filter(r => ['subscribed', 'paid'].includes(r.status)).length,
+        flagged: referrals.filter(r => r.flagged).length,
         totalCommissionPending,
         totalCommissionPaid
       }
@@ -190,6 +253,21 @@ router.put('/admin/:id/commission', protect, adminOnly, async (req, res) => {
     res.json({ success: true, referral });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+router.put('/admin/:id/flag', protect, adminOnly, async (req, res) => {
+  try {
+    const { flagged, flagReason } = req.body;
+    const referral = await Referral.findByIdAndUpdate(
+      req.params.id,
+      { flagged, flagReason: flagReason || 'Manually flagged by admin' },
+      { new: true }
+    );
+    if (!referral) return res.status(404).json({ message: 'Referral not found' });
+    res.json({ success: true, referral });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 
