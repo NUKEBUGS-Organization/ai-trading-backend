@@ -1,7 +1,7 @@
 const express = require('express');
 const Signal = require('../models/Signal');
 const { protect } = require('../middleware/auth');
-const { requireSubscription } = require('../middleware/subscription');
+const { getSignalAccess, maskSignalsForAccess } = require('../utils/subscription');
 const { alignSignalsList } = require('../utils/alignSignalPrices');
 const { REAL_SIGNAL_QUERY, PRODUCT_STRATEGY_NAME } = require('../utils/realSignals');
 const router = express.Router();
@@ -73,13 +73,15 @@ function mergeActiveSignals(dbSignals, engineSignals) {
   );
 }
 
-router.get('/', protect, requireSubscription, async (req, res) => {
+router.get('/', protect, async (req, res) => {
   try {
+    const access = getSignalAccess(req.user);
     const mongoose = require('mongoose');
     if (mongoose.connection.readyState !== 1) {
       const engineOnly = await proxyGetToPython('/api/engine/signals/active');
       if (engineOnly?.ok && engineOnly.data?.signals?.length) {
-        return res.json(alignSignalsList(engineOnly.data.signals.map(mapEngineSignalToRow)));
+        const rows = alignSignalsList(engineOnly.data.signals.map(mapEngineSignalToRow));
+        return res.json(maskSignalsForAccess(rows, access));
       }
       return res.json([]);
     }
@@ -89,7 +91,7 @@ router.get('/', protect, requireSubscription, async (req, res) => {
     const engineResult = await proxyGetToPython('/api/engine/signals/active');
     const engineSignals = engineResult?.ok ? engineResult.data?.signals || [] : [];
     const merged = mergeActiveSignals(dbSignals, engineSignals);
-    res.json(alignSignalsList(merged));
+    res.json(maskSignalsForAccess(alignSignalsList(merged), access));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -98,8 +100,9 @@ router.get('/', protect, requireSubscription, async (req, res) => {
 // @route   GET /api/signals/history
 // @desc    Get signal history (engine-generated only)
 // @access  Private
-router.get('/history', protect, requireSubscription, async (req, res) => {
+router.get('/history', protect, async (req, res) => {
   try {
+    const access = getSignalAccess(req.user);
     const mongoose = require('mongoose');
     if (mongoose.connection.readyState !== 1) {
       return res.json([]);
@@ -107,7 +110,7 @@ router.get('/history', protect, requireSubscription, async (req, res) => {
     const signals = await Signal.find(REAL_SIGNAL_QUERY)
       .sort({ createdAt: -1 })
       .limit(100);
-    res.json(alignSignalsList(signals));
+    res.json(maskSignalsForAccess(alignSignalsList(signals), access));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

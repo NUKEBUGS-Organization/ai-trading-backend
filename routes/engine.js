@@ -4,6 +4,7 @@ const Signal = require('../models/Signal');
 const { PRODUCT_STRATEGY_NAME, LEGACY_STRATEGY_NAMES } = require('../utils/realSignals');
 const { protect, adminOnly } = require('../middleware/auth');
 const { requireSubscription } = require('../middleware/subscription');
+const { getSignalAccess, maskSignalsForAccess } = require('../utils/subscription');
 const router = express.Router();
 const wsHub = require('../wsHub');
 
@@ -438,7 +439,7 @@ router.post('/analyze', protect, requireSubscription, async (req, res) => {
       return res.status(400).json({ message: 'symbol is required' });
     }
     const result = await proxyPostToPython('/api/engine/analyze', { symbol });
-    if (result.ok) return res.json(result.data);
+    if (result.ok) return res.json(maskSignalsForAccess(result.data, getSignalAccess(req.user)));
     return res.status(result.status || 502).json(result.data);
   } catch (error) {
     return res.status(503).json({
@@ -609,7 +610,7 @@ router.get('/analysis/history', protect, async (req, res) => {
 
 router.get('/signals/active', protect, requireSubscription, async (req, res) => {
   const result = await proxyGetToPython('/api/engine/signals/active');
-  if (result.ok) return res.json(result.data);
+  if (result.ok) return res.json(maskSignalsForAccess(result.data, getSignalAccess(req.user)));
   return res.status(result.status || 502).json(result.data || { message: 'Engine not available' });
 });
 

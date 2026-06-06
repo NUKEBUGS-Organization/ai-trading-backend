@@ -56,7 +56,9 @@ const userSchema = new mongoose.Schema({
   },
   subscription: {
     plan: { type: String, enum: ['free', 'starter', 'professional', 'enterprise'], default: 'free' },
-    status: { type: String, enum: ['active', 'inactive', 'expired'], default: 'active' },
+    status: { type: String, enum: ['active', 'trialing', 'inactive', 'expired'], default: 'active' },
+    trialStartedAt: { type: Date, default: null },
+    trialEndsAt: { type: Date, default: null },
     expiresAt: { type: Date, default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) }
   },
   mt5Account: {

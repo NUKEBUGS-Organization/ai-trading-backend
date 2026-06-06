@@ -86,7 +86,10 @@ router.get('/my', protect, async (req, res) => {
       return res.json({ plan: 'professional', status: 'active', licenseKey: 'AX-A1B2-C3D4-E5F6', billing: { nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) } });
     }
 
-    const subscription = await Subscription.findOne({ user: mongoUserId, status: 'active' });
+    const subscription = await Subscription.findOne({
+      user: mongoUserId,
+      status: { $in: ['active', 'trialing'] },
+    }).sort({ createdAt: -1 });
     res.json(subscription || { plan: 'free', status: 'active' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });

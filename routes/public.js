@@ -1,6 +1,7 @@
 const express = require('express');
 const Signal = require('../models/Signal');
 const { alignSignalsList } = require('../utils/alignSignalPrices');
+const { maskSignal } = require('../utils/subscription');
 
 const { PRODUCT_STRATEGY_NAME } = require('../utils/realSignals');
 
@@ -77,6 +78,18 @@ function isShowcaseSignal(signal) {
   return Number.isFinite(signal.entry);
 }
 
+function maskPublicSignal(signal) {
+  return {
+    ...maskSignal(signal),
+    id: signal.id,
+    symbol: signal.symbol,
+    direction: signal.direction,
+    status: signal.status,
+    timestamp: signal.timestamp,
+    closeReason: signal.closeReason || null,
+  };
+}
+
 async function loadSignalsFromDb(filter = {}) {
   const mongoose = require('mongoose');
   if (mongoose.connection.readyState !== 1) return [];
@@ -106,17 +119,11 @@ router.get('/signals', async (req, res) => {
         .filter((s) => !DEMO_STRATEGIES.has(s.strategy));
     }
 
-    signals = signals.slice(0, 6);
+    signals = signals.slice(0, 6).map(maskPublicSignal);
 
     res.json({
       signals,
-      stats: stats
-        ? {
-            total: stats.total ?? 0,
-            winRate: stats.win_rate ?? stats.winRate ?? null,
-            pending: stats.pending ?? signals.length,
-          }
-        : { total: signals.length, winRate: null, pending: signals.length },
+      stats: { total: signals.length, winRate: null, pending: signals.length },
       source,
       updatedAt: new Date().toISOString(),
     });
@@ -139,14 +146,11 @@ router.get('/signals/history', async (req, res) => {
       history = (await loadSignalsFromDb({ status: { $ne: 'active' } })).slice(0, limit);
     }
 
-    history = history.slice(0, limit);
-
-    const wins = history.filter((s) => (s.resultProfit ?? 0) > 0).length;
-    const winRate = history.length ? Math.round((wins / history.length) * 100) : null;
+    history = history.slice(0, limit).map(maskPublicSignal);
 
     res.json({
       history,
-      stats: { total: history.length, winRate, wins },
+      stats: { total: history.length, winRate: null, wins: null },
       updatedAt: new Date().toISOString(),
     });
   } catch (error) {

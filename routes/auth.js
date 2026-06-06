@@ -2,8 +2,10 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Referral = require('../models/Referral');
+const Subscription = require('../models/Subscription');
 const { protect } = require('../middleware/auth');
 const { generateToken: createSecureToken, hashToken } = require('../utils/tokens');
+const { buildTrialSubscription } = require('../utils/trial');
 const {
   isEmailEnabled,
   sendVerificationEmail,
@@ -83,6 +85,7 @@ function userResponse(user, token) {
     email: user.email,
     role: user.role,
     emailVerified: user.emailVerified,
+    subscription: user.subscription,
     ...(token ? { token } : {}),
   };
 }
@@ -124,12 +127,15 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'User already exists with this email' });
     }
 
+    const trial = buildTrialSubscription(new Date());
+
     const user = await User.create({
       name: name.trim(),
       email: normalizedEmail,
       password,
       acceptedTermsAt: new Date(),
       emailVerified: !isEmailEnabled(),
+      subscription: trial,
       mt5Account: {
         accountId: `MT5-${Math.floor(100000 + Math.random() * 900000)}`,
         server: 'VCL4X-Live',
@@ -139,6 +145,30 @@ router.post('/register', async (req, res) => {
         margin: 0,
         freeMargin: 10000,
       },
+    });
+
+    await Subscription.create({
+      user: user._id,
+      plan: trial.plan,
+      licenseKey: `TRIAL-${user._id.toString().slice(-8).toUpperCase()}`,
+      status: trial.status,
+      features: {
+        maxAccounts: 1,
+        aiSignals: true,
+        riskManagement: true,
+        telegramAlerts: true,
+        prioritySupport: false,
+        customStrategies: false,
+      },
+      billing: {
+        amount: 0,
+        currency: 'USD',
+        interval: 'monthly',
+        nextBillingDate: trial.expiresAt,
+      },
+      trialStartedAt: trial.trialStartedAt,
+      trialEndsAt: trial.trialEndsAt,
+      expiresAt: trial.expiresAt,
     });
 
     const refCode = req.body.referralCode || req.query.ref;
