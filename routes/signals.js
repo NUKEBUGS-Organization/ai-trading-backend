@@ -2,6 +2,7 @@ const express = require('express');
 const Signal = require('../models/Signal');
 const { protect } = require('../middleware/auth');
 const { getSignalAccess, maskSignalsForAccess } = require('../utils/subscription');
+const { requireSubscription } = require('../middleware/subscription');
 const { alignSignalsList } = require('../utils/alignSignalPrices');
 const { REAL_SIGNAL_QUERY, PRODUCT_STRATEGY_NAME } = require('../utils/realSignals');
 const router = express.Router();
