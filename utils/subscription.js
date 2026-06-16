@@ -1,4 +1,4 @@
-const PAID_PLANS = ['starter', 'professional', 'enterprise'];
+const PAID_PLANS = ['starter', 'professional', 'enterprise', 'discovery', 'pro', 'elite'];
 const DEMO_EMAILS = ['demo@gmail.com', 'demo@aurumx.com'];
 
 function getSubscription(user) {
@@ -88,7 +88,9 @@ function maskSignal(signal) {
     grade: '',
     riskLevel: '',
     risk_level: '',
-    reason: 'Upgrade to unlock full entry, stop loss, take profit, confidence, and risk details.',
+    qualityScore: null,
+    reason:
+      '🔒 Entry, stop loss, take profit, confidence score, risk level, and trade management notes are available to premium members.',
     masked: true,
     accessLevel: 'preview',
   };

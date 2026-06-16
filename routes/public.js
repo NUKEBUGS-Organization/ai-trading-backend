@@ -79,11 +79,16 @@ function isShowcaseSignal(signal) {
 }
 
 function maskPublicSignal(signal) {
+  const masked = maskSignal(signal);
   return {
-    ...maskSignal(signal),
+    ...masked,
     id: signal.id,
     symbol: signal.symbol,
     direction: signal.direction,
+    session: signal.session,
+    amdPhase: signal.amdPhase,
+    h4Bias: signal.h4Bias,
+    marketBias: signal.h4Bias || signal.marketBias,
     status: signal.status,
     timestamp: signal.timestamp,
     closeReason: signal.closeReason || null,
