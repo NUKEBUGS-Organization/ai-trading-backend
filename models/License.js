@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const licenseSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   licenseKey: { type: String, unique: true, required: true },
-  plan: { type: String, enum: ['free', 'starter', 'professional', 'enterprise'], required: true },
+  plan: { type: String, enum: ['free', 'starter', 'professional', 'enterprise', 'discovery', 'pro', 'elite', 'personal', 'elite_license'], required: true },
   status: { type: String, enum: ['active', 'inactive', 'expired', 'revoked'], default: 'active' },
   activatedAt: { type: Date, default: Date.now },
   expiresAt: { type: Date, required: true },
@@ -23,7 +23,17 @@ const licenseSchema = new mongoose.Schema({
 
 // Generate license key
 licenseSchema.statics.generateKey = function(plan) {
-  const prefix = { free: 'AX-F', starter: 'AX-S', professional: 'AX-P', enterprise: 'AX-E' };
+  const prefix = {
+    free: 'AX-F',
+    starter: 'AX-S',
+    professional: 'AX-P',
+    enterprise: 'AX-E',
+    discovery: 'AX-D',
+    pro: 'AX-PR',
+    elite: 'AX-EL',
+    personal: 'AX-ATP',
+    elite_license: 'AX-ATEL',
+  };
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let key = (prefix[plan] || 'AX-X') + '-';
   for (let i = 0; i < 3; i++) {

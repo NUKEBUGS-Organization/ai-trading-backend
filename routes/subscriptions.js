@@ -3,73 +3,22 @@ const Subscription = require('../models/Subscription');
 const { protect, adminOnly } = require('../middleware/auth');
 const router = express.Router();
 
+const { getPublicCatalog } = require('../config/products');
+
 // @route   GET /api/subscriptions/plans
-// @desc    Get available plans
+// @desc    Get available plans (VCL4X Discovery / Pro / Elite)
 // @access  Public
 router.get('/plans', (req, res) => {
-  const plans = [
-    {
-      id: 'free',
-      name: 'Free',
-      price: 0,
-      interval: 'monthly',
-      features: {
-        maxAccounts: 1,
-        aiSignals: false,
-        riskManagement: false,
-        telegramAlerts: false,
-        prioritySupport: false,
-        customStrategies: false
-      },
-      description: 'Basic access to the platform'
-    },
-    {
-      id: 'starter',
-      name: 'Starter',
-      price: 49,
-      interval: 'monthly',
-      features: {
-        maxAccounts: 2,
-        aiSignals: true,
-        riskManagement: false,
-        telegramAlerts: true,
-        prioritySupport: false,
-        customStrategies: false
-      },
-      description: 'AI signals & Telegram alerts'
-    },
-    {
-      id: 'professional',
-      name: 'Professional',
-      price: 149,
-      interval: 'monthly',
-      features: {
-        maxAccounts: 5,
-        aiSignals: true,
-        riskManagement: true,
-        telegramAlerts: true,
-        prioritySupport: true,
-        customStrategies: false
-      },
-      description: 'Full risk management suite'
-    },
-    {
-      id: 'enterprise',
-      name: 'Enterprise',
-      price: 499,
-      interval: 'monthly',
-      features: {
-        maxAccounts: 999,
-        aiSignals: true,
-        riskManagement: true,
-        telegramAlerts: true,
-        prioritySupport: true,
-        customStrategies: true
-      },
-      description: 'Unlimited accounts & custom strategies'
-    }
-  ];
-
+  const catalog = getPublicCatalog();
+  const plans = catalog.subscriptions.map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    badge: p.badge,
+    pricing: p.pricing,
+    features: p.features,
+    type: 'subscription',
+  }));
   res.json(plans);
 });
 
