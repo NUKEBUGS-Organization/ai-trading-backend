@@ -40,13 +40,17 @@ router.get('/dashboard', protect, adminOnly, async (req, res) => {
     const totalVolume = allTrades.reduce((sum, t) => sum + (t.lotSize * t.openPrice), 0);
     const totalPnL = allTrades.reduce((sum, t) => sum + t.profit, 0);
 
-    // Plan distribution
     const planDistribution = {
-      free: await User.countDocuments({ 'subscription.plan': 'free' }),
-      starter: await User.countDocuments({ 'subscription.plan': 'starter' }),
-      professional: await User.countDocuments({ 'subscription.plan': 'professional' }),
-      enterprise: await User.countDocuments({ 'subscription.plan': 'enterprise' })
+      free: await User.countDocuments({ 'subscription.plan': 'free', role: 'user' }),
+      discovery: await User.countDocuments({ 'subscription.plan': 'discovery', role: 'user' }),
+      starter: await User.countDocuments({ 'subscription.plan': 'starter', role: 'user' }),
+      pro: await User.countDocuments({ 'subscription.plan': 'pro', role: 'user' }),
+      professional: await User.countDocuments({ 'subscription.plan': 'professional', role: 'user' }),
+      elite: await User.countDocuments({ 'subscription.plan': 'elite', role: 'user' }),
+      enterprise: await User.countDocuments({ 'subscription.plan': 'enterprise', role: 'user' }),
     };
+
+    const registeredUsers = await User.countDocuments({ role: 'user' });
 
     // System health
     const systemHealth = {
@@ -62,7 +66,7 @@ router.get('/dashboard', protect, adminOnly, async (req, res) => {
     };
 
     res.json({
-      users: { total: totalUsers, active: activeUsers, admins: adminUsers },
+      users: { total: registeredUsers, active: activeUsers, admins: adminUsers, registered: registeredUsers },
       subscriptions: { active: activeSubscriptions, distribution: planDistribution },
       trading: { totalTrades, openTrades, totalVolume: totalVolume.toFixed(2), totalPnL: totalPnL.toFixed(2) },
       signals: { total: totalSignals, active: activeSignals },
@@ -74,21 +78,25 @@ router.get('/dashboard', protect, adminOnly, async (req, res) => {
 });
 
 // @route   GET /api/admin/users
-// @desc    Get all users
+// @desc    Get all registered platform users (accounts created via signup)
 // @access  Admin
 router.get('/users', protect, adminOnly, async (req, res) => {
   try {
     const mongoose = require('mongoose');
     if (mongoose.connection.readyState !== 1) {
-      return res.json([
-        { _id: 'u1', name: 'John Doe', email: 'john@example.com', role: 'user', subscription: { plan: 'professional' }, isActive: true, mt5Account: { balance: 15000 }, stats: { winRate: 65.4 } },
-        { _id: 'u2', name: 'Jane Smith', email: 'jane@example.com', role: 'user', subscription: { plan: 'free' }, isActive: false, mt5Account: { balance: 0 }, stats: { winRate: 0 } },
-        { _id: 'admin123', name: 'Admin', email: 'admin@aurumx.com', role: 'admin', subscription: { plan: 'enterprise' }, isActive: true, mt5Account: { balance: 52430.80 }, stats: { winRate: 68.2 } }
-      ]);
+      return res.json({ users: [], dbConnected: false, message: 'Database offline — cannot load registered users.' });
     }
 
-    const users = await User.find().select('-password').sort({ createdAt: -1 });
-    res.json(users);
+    const users = await User.find({ role: 'user' })
+      .select('-password -emailVerificationToken -resetPasswordToken')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      users,
+      dbConnected: true,
+      total: users.length,
+      active: users.filter((u) => u.isActive).length,
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

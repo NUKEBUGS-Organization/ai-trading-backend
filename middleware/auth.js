@@ -53,13 +53,24 @@ const protect = async (req, res, next) => {
   return res.status(401).json({ message: 'Not authorized, no token' });
 };
 
+const ADMIN_EMAILS = [
+  (process.env.DEFAULT_ADMIN_EMAIL || 'admin@vcl4xengine.com').toLowerCase(),
+  'admin@aurumx.com',
+];
+
+function isAdminUser(user) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  return ADMIN_EMAILS.includes(String(user.email || '').toLowerCase());
+}
+
 // Admin-only middleware
 const adminOnly = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') {
+  if (isAdminUser(req.user)) {
     next();
   } else {
     res.status(403).json({ message: 'Access denied. Admin only.' });
   }
 };
 
-module.exports = { protect, adminOnly };
+module.exports = { protect, adminOnly, isAdminUser };
