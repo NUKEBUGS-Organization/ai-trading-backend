@@ -1,7 +1,7 @@
 const { Resend } = require('resend');
 
 const PRODUCT_NAME = process.env.PRODUCT_NAME || 'VCL4X';
-const FROM_EMAIL = process.env.EMAIL_FROM || 'VCL4X <onboarding@resend.dev>';
+const FROM_EMAIL = process.env.EMAIL_FROM || 'VCL4X <support@vcl4xengine.com>';
 const DASHBOARD_URL = (process.env.DASHBOARD_URL || 'https://ai-tradingbot-frontend.vcl4xengine.com').replace(/\/$/, '');
 
 let resendClient = null;
@@ -59,8 +59,9 @@ function buttonHtml(href, label) {
 async function sendEmail({ to, subject, html }) {
   const client = getResend();
   if (!client) {
-    console.warn('[email] RESEND_API_KEY not set — email not sent:', subject, '→', to);
-    return { ok: false, skipped: true };
+    const reason = 'RESEND_API_KEY is not configured on the server';
+    console.warn('[email]', reason, '— not sent:', subject, '→', to);
+    return { ok: false, skipped: true, reason };
   }
   try {
     const { data, error } = await client.emails.send({
@@ -70,16 +71,41 @@ async function sendEmail({ to, subject, html }) {
       html,
     });
     if (error) {
-      console.error('[email] Resend error:', error);
-      return { ok: false, error };
+      const reason = typeof error === 'string' ? error : (error.message || JSON.stringify(error));
+      console.error('[email] Resend API error:', reason, '→', to, 'from:', FROM_EMAIL);
+      return { ok: false, error: reason };
     }
+    console.log('[email] Sent:', subject, '→', to, 'id:', data?.id);
     return { ok: true, id: data?.id };
   } catch (err) {
-    console.error('[email] Send failed:', err.message);
+    console.error('[email] Send failed:', err.message, '→', to);
     return { ok: false, error: err.message };
   }
 }
 
+async function sendVerificationOtpEmail(user, otp) {
+  const html = baseTemplate(
+    'Your verification code',
+    `
+<p style="margin:0 0 12px;color:#8b949e;font-size:14px;line-height:1.6;">
+  Hi ${user.name}, use this code to verify your email and activate your ${PRODUCT_NAME} account:
+</p>
+<p style="margin:24px 0;text-align:center;">
+  <span style="display:inline-block;background:#0d1117;border:2px solid #d4af37;color:#d4af37;font-size:32px;font-weight:700;letter-spacing:8px;padding:16px 28px;border-radius:10px;font-family:monospace;">
+    ${otp}
+  </span>
+</p>
+<p style="margin:0;color:#545d68;font-size:12px;text-align:center;">This code expires in 10 minutes. If you did not create an account, you can ignore this email.</p>
+`
+  );
+  return sendEmail({
+    to: user.email,
+    subject: `${otp} is your ${PRODUCT_NAME} verification code`,
+    html,
+  });
+}
+
+/** @deprecated Link-based verification — use sendVerificationOtpEmail */
 async function sendVerificationEmail(user, rawToken) {
   const verifyUrl = `${DASHBOARD_URL}/verify-email?token=${encodeURIComponent(rawToken)}`;
   const html = baseTemplate(
@@ -120,7 +146,24 @@ ${buttonHtml(resetUrl, 'Reset Password')}
 
 module.exports = {
   isEmailEnabled,
+  sendVerificationOtpEmail,
   sendVerificationEmail,
   sendPasswordResetEmail,
   DASHBOARD_URL,
+  FROM_EMAIL,
+  getEmailStatus,
 };
+
+function getEmailStatus() {
+  const configured = isEmailEnabled();
+  return {
+    configured,
+    from: FROM_EMAIL,
+    dashboardUrl: DASHBOARD_URL,
+    hint: configured
+      ? (FROM_EMAIL.includes('resend.dev')
+        ? 'Using Resend sandbox sender — only delivers to your Resend account email until a custom domain is verified.'
+        : 'Email service active')
+      : 'Set RESEND_API_KEY on the server to enable verification emails.',
+  };
+}

@@ -20,7 +20,16 @@ async function bootstrap() {
   }
 }
 
-bootstrap();
+bootstrap().then(() => {
+  const { getEmailStatus } = require('./utils/email');
+  const emailStatus = getEmailStatus();
+  if (!emailStatus.configured) {
+    console.warn('⚠️  RESEND_API_KEY not set — verification & password-reset emails are DISABLED');
+  } else {
+    console.log('✉️  Email service:', emailStatus.hint);
+    console.log('   FROM:', emailStatus.from);
+  }
+});
 
 const app = express();
 const server = http.createServer(app);
@@ -57,12 +66,16 @@ app.use('/api/licenses', require('./routes/licenses'));
 app.use('/api/referral', require('./routes/referral'));
 
 // Health check
+const { getEmailStatus } = require('./utils/email');
+
 app.get('/api/health', (req, res) => {
+  const email = getEmailStatus();
   res.json({
     status: 'operational',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
-    version: '1.0.0'
+    version: '1.0.0',
+    email,
   });
 });
 

@@ -4,16 +4,16 @@ const User = require('../models/User');
 const Referral = require('../models/Referral');
 const Subscription = require('../models/Subscription');
 const { protect } = require('../middleware/auth');
-const { generateToken: createSecureToken, hashToken } = require('../utils/tokens');
+const { generateToken: createSecureToken, generateOtp, hashToken } = require('../utils/tokens');
 const { buildTrialSubscription } = require('../utils/trial');
 const {
   isEmailEnabled,
-  sendVerificationEmail,
+  sendVerificationOtpEmail,
   sendPasswordResetEmail,
 } = require('../utils/email');
 const router = express.Router();
 
-const VERIFICATION_EXPIRE_MS = 24 * 60 * 60 * 1000;
+const OTP_EXPIRE_MS = 10 * 60 * 1000;
 const RESET_EXPIRE_MS = 60 * 60 * 1000;
 
 const ADMIN_EMAIL = (process.env.DEFAULT_ADMIN_EMAIL || 'admin@vcl4xengine.com').toLowerCase();
@@ -61,13 +61,18 @@ function validateEmail(email) {
   return typeof email === 'string' && /^\S+@\S+\.\S+$/.test(email.trim());
 }
 
-async function assignVerificationToken(user) {
-  const rawToken = createSecureToken();
-  user.emailVerificationToken = hashToken(rawToken);
-  user.emailVerificationExpire = new Date(Date.now() + VERIFICATION_EXPIRE_MS);
+async function assignVerificationOtp(user) {
+  const otp = generateOtp();
+  user.emailVerificationToken = hashToken(otp);
+  user.emailVerificationExpire = new Date(Date.now() + OTP_EXPIRE_MS);
   user.emailVerified = false;
   await user.save();
-  return rawToken;
+  return otp;
+}
+
+function normalizeOtp(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  return digits.length === 5 ? digits : null;
 }
 
 async function assignResetToken(user) {
@@ -121,6 +126,13 @@ router.post('/register', async (req, res) => {
       });
     }
 
+    if (!isEmailEnabled() && process.env.NODE_ENV === 'production') {
+      return res.status(503).json({
+        message: 'Registration is temporarily unavailable. Email verification is required.',
+        code: 'EMAIL_NOT_CONFIGURED',
+      });
+    }
+
     const normalizedEmail = email.toLowerCase().trim();
     const userExists = await User.findOne({ email: normalizedEmail });
     if (userExists) {
@@ -134,7 +146,7 @@ router.post('/register', async (req, res) => {
       email: normalizedEmail,
       password,
       acceptedTermsAt: new Date(),
-      emailVerified: !isEmailEnabled(),
+      emailVerified: false,
       subscription: trial,
       mt5Account: {
         accountId: `MT5-${Math.floor(100000 + Math.random() * 900000)}`,
@@ -192,18 +204,29 @@ router.post('/register', async (req, res) => {
       }
     }
 
+    const otp = await assignVerificationOtp(user);
+    let emailSent = false;
+
     if (isEmailEnabled()) {
-      const rawToken = await assignVerificationToken(user);
-      await sendVerificationEmail(user, rawToken);
-      return res.status(201).json({
-        ...userResponse(user),
-        requiresVerification: true,
-        message: 'Account created. Please check your email to verify your account.',
-      });
+      const sendResult = await sendVerificationOtpEmail(user, otp);
+      emailSent = Boolean(sendResult.ok);
+      if (!sendResult.ok) {
+        console.error('[register] OTP email failed:', user.email, sendResult.error || sendResult.reason);
+      }
+    } else if (process.env.NODE_ENV !== 'production') {
+      console.warn(`[register] DEV OTP for ${user.email}: ${otp}`);
+      emailSent = false;
     }
 
-    const token = generateToken(user._id);
-    return res.status(201).json(userResponse(user, token));
+    return res.status(201).json({
+      ...userResponse(user),
+      requiresVerification: true,
+      emailSent,
+      message: emailSent
+        ? 'Account created. Enter the 5-digit code sent to your email.'
+        : 'Account created. Enter the verification code (check server logs in development if email is not configured).',
+      ...(process.env.NODE_ENV !== 'production' && !emailSent ? { devOtp: otp } : {}),
+    });
   } catch (error) {
     return res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -244,9 +267,9 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    if (isEmailEnabled() && user.emailVerified === false && user.emailVerificationExpire) {
+    if (!user.emailVerified) {
       return res.status(403).json({
-        message: 'Please verify your email before signing in. Check your inbox or request a new verification link.',
+        message: 'Please verify your email with the 5-digit code before signing in.',
         code: 'EMAIL_NOT_VERIFIED',
         email: user.email,
       });
@@ -327,22 +350,44 @@ router.post('/change-password', protect, async (req, res) => {
 // @route   POST /api/auth/verify-email
 router.post('/verify-email', async (req, res) => {
   try {
-    const { token } = req.body;
-    if (!token) {
-      return res.status(400).json({ message: 'Verification token is required' });
-    }
+    const { email, otp, token } = req.body;
     if (!isDbReady()) {
       return res.status(503).json({ message: 'Database unavailable' });
     }
 
-    const hashed = hashToken(token);
-    const user = await User.findOne({
-      emailVerificationToken: hashed,
-      emailVerificationExpire: { $gt: Date.now() },
-    }).select('+emailVerificationToken +emailVerificationExpire');
+    let user;
 
-    if (!user) {
-      return res.status(400).json({ message: 'Invalid or expired verification link' });
+    if (email && otp) {
+      if (!validateEmail(email)) {
+        return res.status(400).json({ message: 'Valid email is required' });
+      }
+      const normalizedOtp = normalizeOtp(otp);
+      if (!normalizedOtp) {
+        return res.status(400).json({ message: 'A valid 5-digit verification code is required' });
+      }
+
+      const normalizedEmail = email.toLowerCase().trim();
+      user = await User.findOne({
+        email: normalizedEmail,
+        emailVerificationToken: hashToken(normalizedOtp),
+        emailVerificationExpire: { $gt: Date.now() },
+      }).select('+emailVerificationToken +emailVerificationExpire');
+
+      if (!user) {
+        return res.status(400).json({ message: 'Invalid or expired verification code' });
+      }
+    } else if (token) {
+      const hashed = hashToken(token);
+      user = await User.findOne({
+        emailVerificationToken: hashed,
+        emailVerificationExpire: { $gt: Date.now() },
+      }).select('+emailVerificationToken +emailVerificationExpire');
+
+      if (!user) {
+        return res.status(400).json({ message: 'Invalid or expired verification link' });
+      }
+    } else {
+      return res.status(400).json({ message: 'Email and verification code are required' });
     }
 
     user.emailVerified = true;
@@ -367,7 +412,7 @@ router.post('/resend-verification', async (req, res) => {
     if (!validateEmail(email)) {
       return res.status(400).json({ message: 'Valid email is required' });
     }
-    if (!isEmailEnabled()) {
+    if (!isEmailEnabled() && process.env.NODE_ENV === 'production') {
       return res.status(503).json({ message: 'Email service is not configured' });
     }
     if (!isDbReady()) {
@@ -378,12 +423,33 @@ router.post('/resend-verification', async (req, res) => {
     const user = await User.findOne({ email: normalizedEmail });
 
     if (user && !user.emailVerified) {
-      const rawToken = await assignVerificationToken(user);
-      await sendVerificationEmail(user, rawToken);
+      const otp = await assignVerificationOtp(user);
+      let emailSent = false;
+
+      if (isEmailEnabled()) {
+        const sendResult = await sendVerificationOtpEmail(user, otp);
+        emailSent = Boolean(sendResult.ok);
+        if (!sendResult.ok) {
+          console.error('[resend-verification] Failed:', normalizedEmail, sendResult.error || sendResult.reason);
+          return res.status(502).json({
+            message: 'Could not send verification code. Please try again later or contact support.',
+            emailSent: false,
+            emailError: sendResult.error || sendResult.reason || null,
+          });
+        }
+      } else if (process.env.NODE_ENV !== 'production') {
+        console.warn(`[resend-verification] DEV OTP for ${user.email}: ${otp}`);
+        return res.json({
+          message: 'Development mode: verification code logged on server.',
+          emailSent: false,
+          devOtp: otp,
+        });
+      }
     }
 
     return res.json({
-      message: 'If an unverified account exists for that email, a new verification link has been sent.',
+      message: 'If an unverified account exists for that email, a new 5-digit code has been sent.',
+      emailSent: true,
     });
   } catch (error) {
     return res.status(500).json({ message: 'Server error', error: error.message });
