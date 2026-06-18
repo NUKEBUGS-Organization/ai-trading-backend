@@ -431,8 +431,9 @@ router.post('/resend-verification', async (req, res) => {
         emailSent = Boolean(sendResult.ok);
         if (!sendResult.ok) {
           console.error('[resend-verification] Failed:', normalizedEmail, sendResult.error || sendResult.reason);
-          return res.status(502).json({
+          return res.status(503).json({
             message: 'Could not send verification code. Please try again later or contact support.',
+            code: 'EMAIL_DELIVERY_FAILED',
             emailSent: false,
             emailError: sendResult.error || sendResult.reason || null,
           });
