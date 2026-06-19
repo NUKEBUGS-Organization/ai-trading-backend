@@ -141,7 +141,7 @@ router.post('/register', async (req, res) => {
 
     const trial = buildTrialSubscription(new Date());
 
-    const user = await User.create({
+    let user = await User.create({
       name: name.trim(),
       email: normalizedEmail,
       password,
@@ -159,11 +159,26 @@ router.post('/register', async (req, res) => {
       },
     });
 
+    // Set 5-day free trial
+    const trialEndsAt = new Date();
+    trialEndsAt.setDate(trialEndsAt.getDate() + 5);
+
+    user = await User.findByIdAndUpdate(
+      user._id,
+      {
+        'subscription.plan': 'trial',
+        'subscription.status': 'trialing',
+        'subscription.trialEndsAt': trialEndsAt,
+        'subscription.trialStartedAt': new Date(),
+      },
+      { new: true }
+    );
+
     await Subscription.create({
       user: user._id,
-      plan: trial.plan,
+      plan: 'trial',
       licenseKey: `TRIAL-${user._id.toString().slice(-8).toUpperCase()}`,
-      status: trial.status,
+      status: 'trialing',
       features: {
         maxAccounts: 1,
         aiSignals: true,
@@ -178,9 +193,9 @@ router.post('/register', async (req, res) => {
         interval: 'monthly',
         nextBillingDate: trial.expiresAt,
       },
-      trialStartedAt: trial.trialStartedAt,
-      trialEndsAt: trial.trialEndsAt,
-      expiresAt: trial.expiresAt,
+      trialStartedAt: user.subscription.trialStartedAt,
+      trialEndsAt: user.subscription.trialEndsAt,
+      expiresAt: trialEndsAt,
     });
 
     const refCode = req.body.referralCode || req.query.ref;
