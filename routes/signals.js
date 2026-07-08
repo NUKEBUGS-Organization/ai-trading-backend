@@ -105,14 +105,24 @@ router.get('/history', protect, async (req, res) => {
   try {
     const access = getSignalAccess(req.user);
     const mongoose = require('mongoose');
+    const { since, limit = 50 } = req.query;
+
     if (mongoose.connection.readyState !== 1) {
-      return res.json([]);
+      return res.json({ signals: [], total: 0 });
     }
-    const signals = await Signal.find(REAL_SIGNAL_QUERY)
+
+    const query = { ...REAL_SIGNAL_QUERY };
+    if (since) {
+      query.createdAt = { $gte: new Date(since) };
+    }
+
+    const cap = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
+    const signals = await Signal.find(query)
       .sort({ createdAt: -1 })
-      .limit(100)
+      .limit(cap)
       .lean();
-    res.json(maskSignalsForAccess(alignSignalsList(signals), access));
+    const aligned = maskSignalsForAccess(alignSignalsList(signals), access);
+    res.json({ signals: aligned, total: aligned.length });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
