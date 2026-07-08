@@ -630,4 +630,37 @@ router.post('/auto-trade/toggle', protect, requireSubscription, async (req, res)
   return res.status(result.status || 502).json(result.data || { message: 'Engine not available' });
 });
 
+// Update confidence thresholds
+router.post('/confidence', protect, adminOnly, async (req, res) => {
+  try {
+    const { trading_min_confidence, signal_min_confidence } = req.body;
+    const result = await proxyPostToPython('/api/engine/confidence', {
+      trading_min_confidence,
+      signal_min_confidence,
+    });
+    if (result.ok) return res.json(result.data);
+    res.status(502).json({ message: 'Engine not available' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Send Telegram broadcast message
+router.post('/telegram/broadcast', protect, adminOnly, async (req, res) => {
+  try {
+    const { message, audience } = req.body;
+    if (!message?.trim()) {
+      return res.status(400).json({ message: 'Message is required' });
+    }
+    const result = await proxyPostToPython('/api/engine/telegram/broadcast', {
+      message,
+      target: audience || 'all',
+    });
+    if (result.ok) return res.json(result.data);
+    res.status(502).json({ message: 'Engine not available' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 module.exports = router;
