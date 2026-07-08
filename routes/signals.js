@@ -110,7 +110,8 @@ router.get('/history', protect, async (req, res) => {
     }
     const signals = await Signal.find(REAL_SIGNAL_QUERY)
       .sort({ createdAt: -1 })
-      .limit(100);
+      .limit(100)
+      .lean();
     res.json(maskSignalsForAccess(alignSignalsList(signals), access));
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
