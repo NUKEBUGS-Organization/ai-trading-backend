@@ -14,11 +14,11 @@ const PYTHON_ENGINE_INTERNAL_URL =
 
 const DEMO_STRATEGIES = new Set(['Trend Follower', 'Grid Recovery', 'AI Scalper', 'AI Momentum']);
 
-async function proxyGetToPython(path) {
+async function proxyGetToPython(path, timeoutMs = 5000) {
   const bases = [...new Set([PYTHON_ENGINE_URL, PYTHON_ENGINE_INTERNAL_URL])];
   for (const base of bases) {
     try {
-      const response = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(5000) });
+      const response = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(timeoutMs) });
       if (!response.ok) continue;
       const text = await response.text();
       return text ? JSON.parse(text) : {};
@@ -160,6 +160,56 @@ router.get('/signals/history', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: 'Unable to load signal history', error: error.message });
+  }
+});
+
+// @route   GET /api/public/prices
+// @desc    Live market prices for landing page (TwelveData / MT5 via Python engine)
+// @access  Public
+router.get('/prices', async (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=10');
+
+    const engineData = await proxyGetToPython('/api/engine/prices', 8000);
+    if (engineData?.prices && Object.keys(engineData.prices).length) {
+      return res.json({
+        success: true,
+        prices: engineData.prices,
+        source: engineData.source || 'twelvedata',
+        updatedAt: engineData.timestamp || new Date().toISOString(),
+      });
+    }
+
+    const statusData = await proxyGetToPython('/api/engine/status');
+    const prices = statusData?.mt5_prices || {};
+    if (Object.keys(prices).length) {
+      return res.json({
+        success: true,
+        prices,
+        source: statusData?.price_source || 'twelvedata',
+        updatedAt: statusData?.timestamp || new Date().toISOString(),
+      });
+    }
+
+    const cached = require('../wsHub').getCachedMt5Prices?.() || null;
+    if (cached && Object.keys(cached).length) {
+      return res.json({
+        success: true,
+        prices: cached,
+        source: 'cache',
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    return res.json({
+      success: false,
+      prices: {},
+      source: null,
+      message: 'Prices unavailable',
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Unable to load prices', error: error.message });
   }
 });
 

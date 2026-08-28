@@ -63,7 +63,7 @@ router.post('/status', async (req, res) => {
 });
 
 // @route   POST /api/engine/prices
-// @desc    Receive live MT5 quotes from Python engine → WebSocket tickers
+// @desc    Receive live market quotes from Python engine → WebSocket tickers
 // @access  Internal
 router.post('/prices', async (req, res) => {
   try {

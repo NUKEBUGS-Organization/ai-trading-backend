@@ -47,6 +47,7 @@ function isPlausibleLiveQuote(configSym, bid) {
   if (configSym === 'EURUSD' || configSym === 'GBPUSD') return bid > 0.5 && bid < 3.5;
   if (configSym === 'USDJPY' || configSym === 'GBPJPY') return bid > 80 && bid < 400;
   if (configSym === 'XAUUSD') return bid > 500 && bid < 20000;
+  if (configSym === 'XTIUSD') return bid > 10 && bid < 500;
   return true;
 }
 
@@ -65,6 +66,7 @@ function normalizePricesForWs(prices) {
       ask,
       spread: Number(q.spread) || 0,
       live: q.live !== false,
+      source: q.source || undefined,
     };
   }
 
@@ -77,7 +79,13 @@ function normalizePricesForWs(prices) {
       const bid = Number(q.bid);
       const ask = Number(q.ask ?? q.bid);
       if (!isPlausibleLiveQuote(configSym, bid)) continue;
-      out[configSym] = { bid, ask, spread: Number(q.spread) || 0, live: true };
+      out[configSym] = {
+        bid,
+        ask,
+        spread: Number(q.spread) || 0,
+        live: true,
+        source: q.source || undefined,
+      };
       break;
     }
   }
@@ -96,10 +104,18 @@ function broadcastMt5PricesFromPayload(body) {
   if (!prices) return false;
   cachedMt5Prices = prices;
   markMt5PricesReceived();
+
+  const rawQuotes = body?.mt5_prices || body?.prices || {};
+  const hasMt5Quote = Object.values(rawQuotes).some((q) =>
+    String(q?.source || '').toLowerCase().startsWith('mt5')
+  );
+  const declared = String(body?.source || body?.price_source || '').toLowerCase();
+  const source = hasMt5Quote || declared === 'mt5' ? 'mt5' : 'twelvedata';
+
   broadcast(
     JSON.stringify({
       type: 'price_update',
-      source: 'mt5',
+      source,
       timestamp: new Date().toISOString(),
       prices,
     })

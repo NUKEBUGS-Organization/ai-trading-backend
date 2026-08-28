@@ -25,9 +25,10 @@ const orderSchema = new mongoose.Schema({
   total: { type: Number, required: true },
   currency: { type: String, default: 'USD' },
   payment: {
-    provider: { type: String, default: 'paymentcloud' },
-    mode: { type: String, default: 'review' },
+    provider: { type: String, default: 'nowpayments' },
+    mode: { type: String, default: 'live' },
     transactionId: { type: String, default: '' },
+    invoiceId: { type: String, default: '' },
     checkoutUrl: { type: String, default: '' },
     paidAt: { type: Date, default: null },
   },
