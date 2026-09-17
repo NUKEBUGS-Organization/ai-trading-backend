@@ -7,24 +7,16 @@ const { PRODUCT_STRATEGY_NAME } = require('../utils/realSignals');
 
 const router = express.Router();
 
-const PYTHON_ENGINE_URL = process.env.PYTHON_ENGINE_URL || 'http://localhost:8000';
-const PYTHON_ENGINE_INTERNAL_URL =
-  process.env.PYTHON_ENGINE_INTERNAL_URL ||
-  'http://srv-captain--ai-tradingbot-python-engine:8000';
+const { fetchPython } = require('../config/pythonEngineClient');
 
 const DEMO_STRATEGIES = new Set(['Trend Follower', 'Grid Recovery', 'AI Scalper', 'AI Momentum']);
 
 async function proxyGetToPython(path) {
-  const bases = [...new Set([PYTHON_ENGINE_URL, PYTHON_ENGINE_INTERNAL_URL])];
-  for (const base of bases) {
-    try {
-      const response = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(5000) });
-      if (!response.ok) continue;
-      const text = await response.text();
-      return text ? JSON.parse(text) : {};
-    } catch {
-      continue;
-    }
+  try {
+    const result = await fetchPython(path, { method: 'GET', timeoutMs: 5000 });
+    if (result.ok) return result.data;
+  } catch {
+    return null;
   }
   return null;
 }

@@ -9,13 +9,18 @@ const Subscription = require('../models/Subscription');
 const connectDB = require('../config/db');
 
 const ADMIN_EMAIL = (process.env.DEFAULT_ADMIN_EMAIL || 'admin@vcl4xengine.com').toLowerCase();
-const ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || 'AdminX@2026!#';
+const ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || '';
 const USER_EMAIL = (process.env.DEFAULT_USER_EMAIL || 'trader@vcl4xengine.com').toLowerCase();
-const USER_PASSWORD = process.env.DEFAULT_USER_PASSWORD || 'DemoX@2026!#';
+const USER_PASSWORD = process.env.DEFAULT_USER_PASSWORD || '';
+const SEED_DEFAULT_PASSWORD = process.env.SEED_DEFAULT_PASSWORD || '';
 
 const symbols = ['XAUUSD', 'XAUUSD', 'XAUUSD', 'EURUSD', 'GBPUSD'];
 const strategies = ['AI Momentum', 'AI Scalper', 'Grid Recovery', 'Trend Follower', 'Mean Reversion'];
 const sessions = ['asian', 'london', 'newyork', 'overlap'];
+
+if (!ADMIN_PASSWORD || !USER_PASSWORD || !SEED_DEFAULT_PASSWORD) {
+  throw new Error('DEFAULT_ADMIN_PASSWORD, DEFAULT_USER_PASSWORD, and SEED_DEFAULT_PASSWORD must be configured before seeding users.');
+}
 
 function randomBetween(min, max) {
   return parseFloat((Math.random() * (max - min) + min).toFixed(2));
@@ -118,7 +123,7 @@ const seedData = async () => {
       const user = await User.create({
         name: names[i],
         email: `${names[i].split(' ')[0].toLowerCase()}@example.com`,
-        password: 'password123',
+        password: SEED_DEFAULT_PASSWORD,
         role: 'user',
         isActive: i !== 6,
         subscription: { plan: plans[i], status: i === 6 ? 'expired' : 'active', expiresAt: new Date(Date.now() + (i === 6 ? -1 : 30) * 24 * 60 * 60 * 1000) },
@@ -250,7 +255,7 @@ const seedData = async () => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('📧 Admin Login:  ', ADMIN_EMAIL);
     console.log('📧 Trader Login: ', USER_EMAIL);
-    console.log('   (passwords from DEFAULT_* env or AdminX@2026!# / DemoX@2026!#)');
+    console.log('   (passwords supplied through environment variables)');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     process.exit(0);

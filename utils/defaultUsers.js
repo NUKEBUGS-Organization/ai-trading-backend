@@ -1,9 +1,9 @@
 const User = require('../models/User');
 
 const ADMIN_EMAIL = (process.env.DEFAULT_ADMIN_EMAIL || 'admin@vcl4xengine.com').toLowerCase();
-const ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || 'AdminX@2026!#';
+const ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || '';
 const USER_EMAIL = (process.env.DEFAULT_USER_EMAIL || 'trader@vcl4xengine.com').toLowerCase();
-const USER_PASSWORD = process.env.DEFAULT_USER_PASSWORD || 'DemoX@2026!#';
+const USER_PASSWORD = process.env.DEFAULT_USER_PASSWORD || '';
 const LEGACY_EMAILS = ['admin@aurumx.com', 'demo@gmail.com', 'demo@aurumx.com'];
 
 async function upsertUser({ email, password, name, role, plan }) {
@@ -48,6 +48,9 @@ async function upsertUser({ email, password, name, role, plan }) {
 }
 
 async function upsertDefaultUsers() {
+  if (!ADMIN_PASSWORD || !USER_PASSWORD) {
+    throw new Error('DEFAULT_ADMIN_PASSWORD and DEFAULT_USER_PASSWORD must be configured; refusing to seed default users.');
+  }
   const results = [];
   results.push(await upsertUser({
     email: ADMIN_EMAIL,

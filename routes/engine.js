@@ -7,35 +7,10 @@ const { requireSubscription } = require('../middleware/subscription');
 const { getSignalAccess, maskSignalsForAccess } = require('../utils/subscription');
 const router = express.Router();
 const wsHub = require('../wsHub');
-
-const PYTHON_ENGINE_INTERNAL_URL =
-  process.env.PYTHON_ENGINE_INTERNAL_URL ||
-  'http://srv-captain--ai-tradingbot-python-engine:8000';
-
-const PYTHON_ENGINE_URL =
-  process.env.PYTHON_ENGINE_URL ||
-  (process.env.NODE_ENV === 'production'
-    ? 'https://ai-tradingbot-python-engine.vcl4xengine.com'
-    : 'http://localhost:8000');
+const { fetchPython } = require('../config/pythonEngineClient');
+const { requireEngineSecret, requireEngineSecretOrJwt } = require('../middleware/engineAuth');
 
 /** CapRover: try public HTTPS first, then internal DNS; avoid localhost in production. */
-function getPythonEngineBases() {
-  const bases = [];
-  const publicUrl = (PYTHON_ENGINE_URL || '').replace(/\/$/, '');
-  const internalUrl = (PYTHON_ENGINE_INTERNAL_URL || '').replace(/\/$/, '');
-  const isLocal = (url) => /localhost|127\.0\.0\.1/.test(url);
-
-  if (publicUrl && !(process.env.NODE_ENV === 'production' && isLocal(publicUrl))) {
-    bases.push(publicUrl);
-  }
-  if (internalUrl && internalUrl !== publicUrl) {
-    bases.push(internalUrl);
-  }
-  if (publicUrl && isLocal(publicUrl)) {
-    bases.push(publicUrl);
-  }
-  return [...new Set(bases.filter(Boolean))];
-}
 
 // Store engine status in memory (updated by Python engine)
 let engineStatus = {
@@ -47,7 +22,7 @@ let engineStatus = {
 // @route   POST /api/engine/status
 // @desc    Receive status update from Python engine
 // @access  Internal
-router.post('/status', async (req, res) => {
+router.post('/status', requireEngineSecret, async (req, res) => {
   try {
     engineStatus = {
       connected: true,
@@ -65,7 +40,7 @@ router.post('/status', async (req, res) => {
 // @route   POST /api/engine/prices
 // @desc    Receive live MT5 quotes from Python engine → WebSocket tickers
 // @access  Internal
-router.post('/prices', async (req, res) => {
+router.post('/prices', requireEngineSecret, async (req, res) => {
   try {
     wsHub.broadcastMt5PricesFromPayload(req.body);
     res.json({ received: true });
@@ -77,41 +52,31 @@ router.post('/prices', async (req, res) => {
 // @route   GET /api/engine/status
 // @desc    Get engine status for dashboard (proxied from Python engine)
 // @access  Private
-async function fetchEngineStatus(baseUrl) {
-  return fetch(`${baseUrl}/api/engine/status`, { signal: AbortSignal.timeout(5000) });
-}
 
 router.get('/status', protect, async (req, res) => {
-  const bases = getPythonEngineBases();
-
-  for (let i = 0; i < bases.length; i++) {
-    const base = bases[i];
-    const isLast = i === bases.length - 1;
-    try {
-      const response = await fetchEngineStatus(base);
-      if (response.ok) {
-        const data = await response.json();
-        wsHub.broadcastMt5AccountFromPayload(data);
-        wsHub.broadcastMt5PricesFromPayload(data);
-        return res.json({ connected: true, ...data });
-      }
-      console.error('Python engine responded with:', response.status, `(${base})`);
-      if (isLast) {
-        return res.json({ connected: false, lastUpdate: null, reason: `Engine returned ${response.status}` });
-      }
-    } catch (error) {
-      console.error('Python engine fetch error:', error.message, `(${base})`);
-      if (isLast) {
-        return res.json({ connected: false, lastUpdate: null, error: error.message });
-      }
+  try {
+    const result = await fetchPython('/api/engine/status', { method: 'GET', timeoutMs: 5000 });
+    if (result.ok) {
+      const data = result.data;
+      wsHub.broadcastMt5AccountFromPayload(data);
+      wsHub.broadcastMt5PricesFromPayload(data);
+      return res.json({ connected: true, ...data });
     }
+    return res.json({
+      connected: false,
+      lastUpdate: null,
+      reason: `Engine returned ${result.status}`,
+    });
+  } catch (error) {
+    console.error('Python engine fetch error:', error.message);
+    return res.json({ connected: false, lastUpdate: null, error: error.message });
   }
 });
 
 // @route   POST /api/engine/signal
 // @desc    Receive signal from Python engine
 // @access  Internal
-router.post('/signal', async (req, res) => {
+router.post('/signal', requireEngineSecret, async (req, res) => {
   try {
     const signalData = req.body;
     const grade = signalData.grade || '';
@@ -159,7 +124,7 @@ router.post('/signal', async (req, res) => {
 // @route   POST /api/engine/signal/result
 // @desc    Update signal when trade closes (TP/SL/manual)
 // @access  Internal
-router.post('/signal/result', async (req, res) => {
+router.post('/signal/result', requireEngineSecret, async (req, res) => {
   try {
     const {
       signalId,
@@ -218,7 +183,7 @@ router.post('/signal/result', async (req, res) => {
 // @route   POST /api/engine/trade
 // @desc    Receive trade execution from Python engine
 // @access  Internal
-router.post('/trade', async (req, res) => {
+router.post('/trade', requireEngineSecret, async (req, res) => {
   try {
     const body = req.body || {};
     const trade = await AITrade.create({
@@ -352,63 +317,19 @@ router.get('/trades/equity-curve', protect, requireSubscription, async (req, res
 // @desc    Run AI market analysis (proxies to Python engine)
 // @access  Private
 async function proxyGetToPython(path) {
-  const bases = getPythonEngineBases();
-  let lastStatus = 502;
-  let lastData = { message: 'Python engine unreachable' };
-  for (const base of bases) {
-    try {
-      const response = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(5000) });
-      const text = await response.text();
-      let data = {};
-      if (text) {
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = { message: text };
-        }
-      }
-      if (response.ok) return { ok: true, data };
-      lastStatus = response.status;
-      lastData = data;
-    } catch (e) {
-      lastData = { message: e.message };
-      continue;
-    }
+  try {
+    return await fetchPython(path, { method: 'GET', timeoutMs: 5000 });
+  } catch (e) {
+    return { ok: false, status: e.status || 503, data: { message: e.message } };
   }
-  return { ok: false, status: lastStatus, data: lastData };
 }
 
 async function proxyPostToPython(path, body, timeoutMs = 60000) {
-  const bases = getPythonEngineBases();
-  let lastError = null;
-
-  for (let i = 0; i < bases.length; i++) {
-    const base = bases[i];
-    const isLast = i === bases.length - 1;
-    try {
-      const response = await fetch(`${base}${path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      const text = await response.text();
-      let data = {};
-      if (text) {
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = { message: text };
-        }
-      }
-      if (response.ok) return { ok: true, data };
-      if (isLast) return { ok: false, status: response.status, data };
-    } catch (error) {
-      lastError = error;
-      if (isLast) throw error;
-    }
+  try {
+    return await fetchPython(path, { method: 'POST', body, timeoutMs });
+  } catch (error) {
+    throw error;
   }
-  throw lastError || new Error('Python engine unreachable');
 }
 
 // @route   GET /api/engine/candles/:symbol
@@ -497,10 +418,28 @@ router.post('/backtest', protect, requireSubscription, async (req, res) => {
   }
 });
 
+// @route   GET /api/engine/risk/admin
+// @desc    Risk preset for Python engine startup (internal)
+// @access  Internal engine secret
+router.get('/risk/admin', requireEngineSecret, async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const admin = await User.findOne({ role: 'admin' });
+    if (admin) {
+      return res.json({
+        preset: admin.riskSettings?.preset || 'moderate',
+        settings: admin.riskSettings,
+      });
+    }
+    res.json({ preset: 'moderate' });
+  } catch (error) {
+    res.status(500).json({ preset: 'moderate' });
+  }
+});
+
 // @route   GET /api/engine/risk/:userId
-// @desc    Get risk settings for user (used by Python engine)
-// @access  Internal
-router.get('/risk/:userId', async (req, res) => {
+// @desc    Get risk settings (dashboard JWT or Python engine secret)
+router.get('/risk/:userId', requireEngineSecretOrJwt(protect), async (req, res) => {
   try {
     const mongoose = require('mongoose');
     const { userId } = req.params;
@@ -526,22 +465,6 @@ router.get('/risk/:userId', async (req, res) => {
     res.json(user.riskSettings);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
-
-router.get('/risk/admin', async (req, res) => {
-  try {
-    const User = require('../models/User');
-    const admin = await User.findOne({ role: 'admin' });
-    if (admin) {
-      return res.json({
-        preset: admin.riskSettings?.preset || 'moderate',
-        settings: admin.riskSettings,
-      });
-    }
-    res.json({ preset: 'moderate' });
-  } catch (error) {
-    res.status(500).json({ preset: 'moderate' });
   }
 });
 
@@ -620,7 +543,7 @@ router.get('/auto-trade/status', protect, requireSubscription, async (req, res) 
   res.status(502).json({ message: 'Engine not available' });
 });
 
-router.post('/auto-trade/toggle', protect, requireSubscription, async (req, res) => {
+router.post('/auto-trade/toggle', protect, adminOnly, async (req, res) => {
   const { enabled } = req.body;
   if (typeof enabled !== 'boolean') {
     return res.status(400).json({ message: 'enabled (boolean) is required' });

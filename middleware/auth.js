@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { mockAuthAllowed } = require('../config/pythonEngineClient');
 
 // Protect routes - verify JWT token
 const protect = async (req, res, next) => {
@@ -7,19 +8,21 @@ const protect = async (req, res, next) => {
 
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
-    
-    // Mock Mode Support
-    if (token === 'mock-admin-token') {
-      req.user = {
-        _id: 'admin123',
-        name: 'Admin',
-        email: 'admin@aurumx.com',
-        role: 'admin',
-        subscription: { plan: 'enterprise', status: 'active', expiresAt: new Date(Date.now() + 365 * 86400000) },
-      };
-      return next();
-    }
-    if (token === 'mock-user-token') {
+
+    if (token === 'mock-admin-token' || token === 'mock-user-token') {
+      if (!mockAuthAllowed()) {
+        return res.status(401).json({ message: 'Mock authentication is disabled' });
+      }
+      if (token === 'mock-admin-token') {
+        req.user = {
+          _id: 'admin123',
+          name: 'Admin',
+          email: 'admin@aurumx.com',
+          role: 'admin',
+          subscription: { plan: 'enterprise', status: 'active', expiresAt: new Date(Date.now() + 365 * 86400000) },
+        };
+        return next();
+      }
       req.user = {
         _id: 'user123',
         name: 'Demo Trader',
@@ -73,4 +76,4 @@ const adminOnly = (req, res, next) => {
   }
 };
 
-module.exports = { protect, adminOnly, isAdminUser };
+module.exports = { protect, adminOnly, isAdminUser, mockAuthAllowed: require('../config/pythonEngineClient').mockAuthAllowed };

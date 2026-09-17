@@ -7,21 +7,14 @@ const { alignSignalsList } = require('../utils/alignSignalPrices');
 const { REAL_SIGNAL_QUERY, PRODUCT_STRATEGY_NAME } = require('../utils/realSignals');
 const router = express.Router();
 
-const PYTHON_ENGINE_URL = process.env.PYTHON_ENGINE_URL || 'http://localhost:8000';
-const PYTHON_ENGINE_INTERNAL_URL =
-  process.env.PYTHON_ENGINE_INTERNAL_URL || 'http://srv-captain--ai-tradingbot-python-engine:8000';
+const { fetchPython } = require('../config/pythonEngineClient');
 
 async function proxyGetToPython(path) {
-  const bases = [...new Set([PYTHON_ENGINE_URL, PYTHON_ENGINE_INTERNAL_URL])];
-  for (const base of bases) {
-    try {
-      const response = await fetch(`${base}${path}`, { signal: AbortSignal.timeout(5000) });
-      if (response.ok) return { ok: true, data: await response.json() };
-    } catch (e) {
-      continue;
-    }
+  try {
+    return await fetchPython(path, { method: 'GET', timeoutMs: 5000 });
+  } catch (e) {
+    return { ok: false };
   }
-  return { ok: false };
 }
 
 // @route   GET /api/signals

@@ -17,9 +17,9 @@ const OTP_EXPIRE_MS = 10 * 60 * 1000;
 const RESET_EXPIRE_MS = 60 * 60 * 1000;
 
 const ADMIN_EMAIL = (process.env.DEFAULT_ADMIN_EMAIL || 'admin@vcl4xengine.com').toLowerCase();
-const ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || 'AdminX@2026!#';
+const ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || '';
 const USER_EMAIL = (process.env.DEFAULT_USER_EMAIL || 'trader@vcl4xengine.com').toLowerCase();
-const USER_PASSWORD = process.env.DEFAULT_USER_PASSWORD || 'DemoX@2026!#';
+const USER_PASSWORD = process.env.DEFAULT_USER_PASSWORD || '';
 
 const MOCK_DEMO = {
   [ADMIN_EMAIL]: {
@@ -46,8 +46,9 @@ const MOCK_DEMO = {
   },
 };
 
-const allowMockAuth = () =>
-  process.env.ALLOW_MOCK_AUTH === 'true' || process.env.NODE_ENV !== 'production';
+const { mockAuthAllowed } = require('../config/pythonEngineClient');
+
+const allowMockAuth = () => mockAuthAllowed();
 
 const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE || '7d' });

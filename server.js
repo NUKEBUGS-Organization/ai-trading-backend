@@ -4,6 +4,13 @@ const cors = require('cors');
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const connectDB = require('./config/db');
+const {
+  resolveAppEnv,
+  getPythonEngineUrls,
+  formatStartupSummary,
+  mongoDatabaseName,
+} = require('./config/envSafety');
+const { getCorsOrigins, getEngineSharedSecret, mockAuthAllowed } = require('./config/pythonEngineClient');
 
 async function bootstrap() {
   const dbReady = await connectDB();
@@ -39,14 +46,7 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 
 // Middleware
 app.use(cors({
-  origin: [
-    'https://ai-tradingbot-frontend.vcl4xengine.com',
-    'https://vcl4xengine.com',
-    'https://www.vcl4xengine.com',
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'http://localhost:3001'
-  ],
+  origin: getCorsOrigins(),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -70,11 +70,21 @@ const { getEmailStatus } = require('./utils/email');
 
 app.get('/api/health', (req, res) => {
   const email = getEmailStatus();
+  const appEnv = resolveAppEnv();
+  const { publicUrl } = getPythonEngineUrls();
   res.json({
     status: 'operational',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
     version: '1.0.0',
+    environment: {
+      app_env: appEnv,
+      node_env: process.env.NODE_ENV || 'unspecified',
+      database_name: mongoDatabaseName(process.env.MONGODB_URI || ''),
+      python_engine: publicUrl,
+      internal_api_auth: getEngineSharedSecret() ? 'enabled' : 'unconfigured',
+      mock_auth: mockAuthAllowed() ? 'enabled' : 'disabled',
+    },
     email,
   });
 });
@@ -200,7 +210,18 @@ if (process.env.ENABLE_DEMO_SIGNAL_WS === 'true') {
 // Start Server
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
+  const appEnv = resolveAppEnv();
+  const { publicUrl } = getPythonEngineUrls();
   console.log(`\n🚀 VCL4X Trading Server running on port ${PORT}`);
+  console.log(formatStartupSummary({
+    appEnv,
+    mongodbUri: process.env.MONGODB_URI,
+    pythonEngineUrl: publicUrl,
+    port: PORT,
+  }));
+  console.log(`Internal API Auth: ${getEngineSharedSecret() ? 'ENABLED' : 'UNCONFIGURED (fail-closed)'}`);
+  console.log(`Mock Auth: ${mockAuthAllowed() ? 'ENABLED' : 'DISABLED'}`);
+  console.log(`Node CORS: RESTRICTED (${getCorsOrigins().length} origins)`);
   const wsProto = process.env.NODE_ENV === 'production' ? 'wss' : 'ws';
   const httpProto = process.env.NODE_ENV === 'production' ? 'https' : 'http';
   console.log(`📡 WebSocket server running on ${wsProto}://localhost:${PORT}/ws`);
