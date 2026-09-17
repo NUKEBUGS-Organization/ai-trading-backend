@@ -156,7 +156,7 @@ function getPublicCatalog() {
     subscriptions: SUBSCRIPTION_PLANS,
     licenses: AUTO_TRADING_LICENSES,
     currency: 'USD',
-    paymentProvider: 'PaymentCloud',
+    paymentProvider: 'NOWPayments',
   };
 }
 
