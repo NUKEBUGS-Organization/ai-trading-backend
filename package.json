@@ -4,8 +4,8 @@
   "description": "AurumX AI Trading Platform - Backend API",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "node init && node server.js",
+    "dev": "node init && nodemon server.js",
     "test:env": "node config/envSafety.test.js",
     "test:auth": "node config/engineAuth.test.js",
     "test": "npm run test:env && npm run test:auth",
